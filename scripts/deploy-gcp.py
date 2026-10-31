@@ -103,16 +103,31 @@ def deploy():
 
 def bootstrap():
     state=json.loads((LOCAL/'deployment.json').read_text()); url=state['url']
-    if (LOCAL/'operator.json').exists(): print('Operator already recorded; no bootstrap repeated.'); return
-    pwd=secrets.token_urlsafe(24)
-    payload={'email':'operator@mypetpair.example','password':pwd,'displayName':'MyPetPair operator','adultConfirmed':True,'termsAccepted':True,'invitationCode':secret('mypetpair-invitation')}
-    req=urllib.request.Request(url+'/api/auth/register',data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'},method='POST')
-    result=json.loads(urllib.request.urlopen(req,timeout=60).read())
-    # Revoke one-time bootstrap session immediately. Password is retained only in Secret Manager.
-    urllib.request.urlopen(urllib.request.Request(url+'/api/auth/logout',data=b'',headers={'Authorization':'Bearer '+result['token']},method='POST'),timeout=30).read()
-    save_secret('mypetpair-operator-password',pwd)
-    operator={'id':result['user']['id'],'email':'operator@mypetpair.example'}
-    (LOCAL/'operator.json').write_text(json.dumps(operator,indent=2))
+    operator_path=LOCAL/'operator.json'
+    if operator_path.exists():
+        operator=json.loads(operator_path.read_text())
+    else:
+        name='mypetpair-operator-password'
+        if exists('secrets','describe',name,'--format=value(name)'):
+            pwd=secret(name)
+        else:
+            pwd=secrets.token_urlsafe(24)
+            save_secret(name,pwd)
+        payload={'email':'operator@mypetpair.example','password':pwd,'displayName':'MyPetPair operator','adultConfirmed':True,'termsAccepted':True,'invitationCode':secret('mypetpair-invitation')}
+        def auth(path,body):
+            req=urllib.request.Request(url+path,data=json.dumps(body).encode(),headers={'Content-Type':'application/json'},method='POST')
+            return json.loads(urllib.request.urlopen(req,timeout=60).read())
+        try:
+            result=auth('/api/auth/register',payload)
+        except urllib.error.HTTPError as error:
+            if error.code!=409: raise
+            result=auth('/api/auth/login',{'email':payload['email'],'password':pwd})
+        operator={'id':result['user']['id'],'email':'operator@mypetpair.example'}
+        operator_path.write_text(json.dumps(operator,indent=2))
+        try:
+            urllib.request.urlopen(urllib.request.Request(url+'/api/auth/logout',data=b'',headers={'Authorization':'Bearer '+result['token']},method='POST'),timeout=30).read()
+        except urllib.error.URLError:
+            print('Bootstrap session logout failed; its bounded expiry still applies. Retry logout operationally.')
     run('run','services','update','mypetpair',f'--region={REGION}',f'--update-env-vars=APP_ADMIN_OWNER_IDS={operator["id"]}')
     print('Operator provisioned; login email operator@mypetpair.example; password in Secret Manager mypetpair-operator-password. No credential printed.')
 
