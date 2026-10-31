@@ -10,6 +10,13 @@ The backend uses Java 17 and Spring Boot. One Expo React Native and React Native
 
 The [PRD](docs/PRD.md) separates confirmed requirements, delegated defaults and public-launch decisions. The [Spec Kit feature](specs/001-owner-matching/spec.md), [implementation plan](specs/001-owner-matching/plan.md), [tasks](specs/001-owner-matching/tasks.md) and [independent review](docs/SPEC_REVIEW.md) define implementation and acceptance criteria.
 
+To resume the existing Spec Kit feature after cloning, set its directory before running the installed skills or scripts:
+
+```sh
+export SPECIFY_FEATURE_DIRECTORY=specs/001-owner-matching
+.specify/scripts/bash/check-prerequisites.sh --json --require-spec --require-tasks --include-tasks
+```
+
 - [REST API contract](specs/001-owner-matching/contracts/api.md)
 - [Database model and lifecycle](specs/001-owner-matching/data-model.md)
 - [Operations and environment configuration](docs/OPERATIONS.md)
@@ -31,7 +38,7 @@ The API listens on `http://localhost:8080`; `GET /api/health` returns its status
 
 The project Maven settings file resolves dependencies from public Maven Central and keeps builds independent of machine-specific private mirrors. It contains no credentials.
 
-For fictional sample data, stop the backend and restart it from the repository root as follows. Seed mode must never be enabled on a deployment containing real users.
+For fictional sample data, stop the backend and restart it from the `backend` directory as follows. Seed mode must never be enabled on a deployment containing real users.
 
 ```sh
 cd backend

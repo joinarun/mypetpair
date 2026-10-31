@@ -77,3 +77,11 @@ Run the documented backend tests, frontend typecheck and platform exports before
 Cloud Run can direct traffic back to an earlier healthy revision, but application rollback does not reverse a database migration. Check schema compatibility before shifting traffic. Keep the previous revision and database backup until smoke checks pass. Do not delete Cloud SQL or disable deletion protection as a routine rollback step.
 
 Cloud Run uses the Java Cloud SQL connector with `cloudSqlRefreshStrategy=lazy` so certificate refresh happens during connection attempts rather than relying on background CPU. This follows [Google Cloud serverless connection guidance](https://docs.cloud.google.com/sql/docs/postgres/connect-run). The JDBC URL contains configuration only; the database password remains a separate Secret Manager runtime binding.
+
+Operator access uses `operator@mypetpair.example`. Retrieve the password only in a private operator terminal:
+
+```sh
+gcloud secrets versions access latest --secret=mypetpair-operator-password --project=mypetpair
+```
+
+The invitation is stored separately as `mypetpair-invitation`. Do not paste either value into source, issue trackers, logs or public chat. The bootstrap saves the generated password before account creation and can resume a partially completed registration by signing in with that stored password; it re-applies the immutable administrator ID on retry.
