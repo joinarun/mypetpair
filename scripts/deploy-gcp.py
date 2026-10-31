@@ -63,7 +63,7 @@ def provision():
     if not any(x['name']=='mypetpair' for x in dbs): run('sql','databases','create','mypetpair',f'--instance={INSTANCE}')
     users=json.loads(run('sql','users','list',f'--instance={INSTANCE}','--format=json(name)',capture=True))
     if not any(x['name']=='mypetpair' for x in users):
-        flags=LOCAL/'db-user-flags.json'; flags.write_text(json.dumps({'password':secret('mypetpair-db-password'),'instance':INSTANCE})); flags.chmod(0o600)
+        flags=LOCAL/'db-user-flags.json'; flags.write_text(json.dumps({'--password':secret('mypetpair-db-password'),'--instance':INSTANCE})); flags.chmod(0o600)
         try: run('sql','users','create','mypetpair',f'--flags-file={flags}')
         finally: flags.unlink(missing_ok=True)
     print('Provisioned pilot infrastructure; SQL connector has no authorized public networks. Secrets stored in Secret Manager.')
