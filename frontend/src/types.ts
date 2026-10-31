@@ -1,0 +1,90 @@
+export type User = {
+  id: string;
+  email: string;
+  displayName: string;
+  phone?: string | null;
+  admin: boolean;
+};
+export type Dog = {
+  id: string;
+  ownerId: string;
+  name: string;
+  breed: string;
+  sex: "MALE" | "FEMALE";
+  ageMonths: number;
+  city: string;
+  weightKg?: number | null;
+  temperament: string;
+  bio: string;
+  healthSummary: string;
+  vetCheckedOn?: string | null;
+  intact: boolean;
+  vaccinated: boolean;
+  registry?: string | null;
+  available: boolean;
+  photoIds: string[];
+  eligible: boolean;
+  healthStatus?: string;
+  distanceBand?: string;
+  birthDate?: string;
+  latitude?: number;
+  longitude?: number;
+  ownershipAttested?: boolean;
+  moderation?: string;
+  moderationReason?: string;
+  archived?: boolean;
+  unavailable?: boolean;
+};
+export type DogWrite = {
+  name: string;
+  breed: string;
+  sex: "MALE" | "FEMALE";
+  birthDate: string;
+  city: string;
+  latitude: number;
+  longitude: number;
+  weightKg?: number | null;
+  temperament: string;
+  bio: string;
+  healthSummary: string;
+  vetCheckedOn?: string | null;
+  intact: boolean;
+  vaccinated: boolean;
+  ownershipAttested: boolean;
+  registry?: string;
+  available: boolean;
+};
+export type Interest = {
+  id: string;
+  maleDog: Dog;
+  femaleDog: Dog;
+  state: string;
+  createdAt: string;
+  updatedAt: string;
+};
+export type Contacts = {
+  myGrant: { shareEmail: boolean; sharePhone: boolean };
+  contact: {
+    displayName: string;
+    email?: string | null;
+    phone?: string | null;
+  };
+};
+export type Report = {
+  id: string;
+  dogId: string;
+  reporterId: string;
+  reason: string;
+  details: string;
+  status: string;
+  createdAt?: string;
+  resolution?: string;
+};
+export type Audit = {
+  id: string;
+  action: string;
+  targetId: string;
+  createdAt?: string;
+  timestamp?: string;
+  detail?: string;
+};

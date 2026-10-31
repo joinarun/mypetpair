@@ -1,0 +1,13 @@
+.git
+node_modules
+**/node_modules
+**/.expo
+**/dist
+**/target
+**/*.log
+.env*
+**/.env*
+.local
+secrets
+.specify
+.agents
