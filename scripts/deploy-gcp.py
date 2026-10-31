@@ -88,7 +88,7 @@ def deploy():
     if status!='SUCCESS': raise RuntimeError('Build not successful yet: '+str(status))
     admin=''
     if (LOCAL/'operator.json').exists(): admin=json.loads((LOCAL/'operator.json').read_text())['id']
-    env={'DB_URL':f'jdbc:postgresql:///mypetpair?cloudSqlInstance={PROJECT}:{REGION}:{INSTANCE}&socketFactory=com.google.cloud.sql.postgres.SocketFactory','DB_USERNAME':'mypetpair','APP_INVITATION_REQUIRED':'true','APP_SEED':'false','APP_ADMIN_OWNER_IDS':admin,'CORS_ALLOWED_ORIGINS':''}
+    env={'DB_URL':f'jdbc:postgresql:///mypetpair?cloudSqlInstance={PROJECT}:{REGION}:{INSTANCE}&socketFactory=com.google.cloud.sql.postgres.SocketFactory&cloudSqlRefreshStrategy=lazy','DB_USERNAME':'mypetpair','APP_INVITATION_REQUIRED':'true','APP_SEED':'false','APP_ADMIN_OWNER_IDS':admin,'CORS_ALLOWED_ORIGINS':''}
     path=LOCAL/'run-env.json'; path.write_text(json.dumps(env)); path.chmod(0o600)
     run('run','deploy','mypetpair',f'--region={REGION}',f'--image={state["image"]}',f'--service-account={RUNTIME}',f'--add-cloudsql-instances={PROJECT}:{REGION}:{INSTANCE}',f'--env-vars-file={path}','--set-secrets=DB_PASSWORD=mypetpair-db-password:latest,APP_INVITATION_CODE=mypetpair-invitation:latest','--memory=1Gi','--cpu=1','--min-instances=0','--max-instances=2','--concurrency=20','--timeout=60','--allow-unauthenticated','--port=8080')
     url=run('run','services','describe','mypetpair',f'--region={REGION}','--format=value(status.url)',capture=True)
