@@ -59,6 +59,12 @@ def provision():
         run('secrets','add-iam-policy-binding',name,f'--member=serviceAccount:{RUNTIME}','--role=roles/secretmanager.secretAccessor','--format=none')
     if not exists('sql','instances','describe',INSTANCE,'--format=value(name)'):
         run('sql','instances','create',INSTANCE,f'--region={REGION}','--database-version=POSTGRES_17','--edition=ENTERPRISE','--tier=db-f1-micro','--storage-size=10GB','--storage-type=SSD','--availability-type=zonal','--backup-start-time=03:00','--retained-backups-count=7','--deletion-protection','--assign-ip')
+    deadline=time.monotonic()+1200
+    while True:
+        state=run('sql','instances','describe',INSTANCE,'--format=value(state)',capture=True)
+        if state=='RUNNABLE': break
+        if state!='PENDING_CREATE' or time.monotonic()>deadline: raise RuntimeError('Cloud SQL is not ready: '+str(state))
+        time.sleep(10)
     dbs=json.loads(run('sql','databases','list',f'--instance={INSTANCE}','--format=json(name)',capture=True))
     if not any(x['name']=='mypetpair' for x in dbs): run('sql','databases','create','mypetpair',f'--instance={INSTANCE}')
     users=json.loads(run('sql','users','list',f'--instance={INSTANCE}','--format=json(name)',capture=True))
