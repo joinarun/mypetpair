@@ -50,7 +50,7 @@ Goal: report/block/moderate/export/delete. Independent test: role and revoked vi
 - [X] T018 [P] Create Docker/CI/scripts/seed/setup/API/database documentation in `Dockerfile`, `.github/workflows/ci.yml`, `scripts/`, `README.md`, `docs/` (FR-011).
 - [X] T019 Execute backend tests, frontend typecheck, three-platform exports and web smoke; record target vs measured checks in `docs/VERIFICATION.md` (FR-001–011).
 - [X] T020 Scan source for secrets and publish private GitHub repository using Brave; record URL in `docs/RELEASE.md` (FR-011).
-- [ ] T021 Deploy documented GCP pilot and verify URL/health/data; record services/config/limitations in `docs/RELEASE.md` (FR-011).
+- [X] T021 Deploy documented GCP pilot and verify URL/health/data; record services/config/limitations in `docs/RELEASE.md` (FR-011).
 
 ## Dependencies and execution order
 

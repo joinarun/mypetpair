@@ -1,10 +1,12 @@
 # MyPetPair
 
+[Open the live pilot](https://mypetpair-248924650823.us-central1.run.app) · Invitation required · [Deployment and operator access](docs/RELEASE.md)
+
 MyPetPair is an invite-only dog breeding introduction pilot. Owners manage multiple dogs, discover nearby profiles, send male-to-female interest requests and independently control contact sharing after acceptance. Health claims are self-declared; a connection does not certify breeding suitability.
 
 The backend uses Java 17 and Spring Boot. One Expo React Native and React Native Web application targets web, Android and iOS. The [architecture decision](docs/ARCHITECTURE.md) compares the frontend options and records the selected approach, GCP services and cost drivers. No payments are implemented.
 
-![MyPetPair discovery with fictional local sample profiles](docs/images/discovery.jpg)
+![MyPetPair live pilot](docs/images/deployed.jpg)
 
 ## Product and specifications
 

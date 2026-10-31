@@ -1,6 +1,6 @@
 # MyPetPair verification report
 
-This report records executed checks, separately from product targets. Current release work is in progress; pending checks below are not a completion claim.
+This report records executed checks, separately from product targets. Release checks completed on 1 November 2026; unperformed checks below remain explicit limitations.
 
 | Area | Status | Evidence |
 |---|---|---|
@@ -11,7 +11,7 @@ This report records executed checks, separately from product targets. Current re
 | HTTP workflow smoke | Passed locally, 40 checks | Real packaged HTTP service; synthetic test accounts removed afterward |
 | Integrated browser flow | Passed | Real owner login, nearby cards, male interest, female acceptance, no implicit contact, grant/revoke and close; 390×844 narrow layout checked |
 | Secret pattern scan | Passed | High-confidence scan of tracked source and manual configuration/manifest review; no committed deployment credentials |
-| PostgreSQL migration and cloud runtime | Pending | Deployment follows repository publication |
+| PostgreSQL migration and cloud runtime | Passed | Cloud Run Ready; Flyway V1 on PostgreSQL 17; 40 deployed HTTP checks passed and synthetic accounts removed |
 | Native signed release and physical devices | Not run | Requires publisher/signing configuration and target devices |
 | Load/availability/recovery targets | Not measured | Not implied by functional checks; validate before public scale |
 
@@ -20,3 +20,11 @@ Dependency review: safe npm updates applied. 25 moderate advisories remain in th
 Browser review fixed dynamic route asset names rejected by Tomcat and corrected consent checkbox ARIA state/decorative icon semantics. Hidden request summaries retain opaque owner IDs so blocking remains available after profile edits/suspension. UI checks are functional smoke checks, not a comprehensive accessibility audit.
 
 Final browser check: registration adult-confirmation checkbox exposes `aria-checked=true` and stable accessible label after checking. Desktop and 390×844 web previews are in `docs/images/`; the viewport override was reset. Sample connection was closed and contact grant revoked after testing. Cloud source manifest excludes `.local`, `.git`, node_modules, dist, target and local environment files.
+
+## Deployed checks
+
+Cloud Run canonical web URL returns200, `/api/health` returnsok, `/api/config` confirms invitations required, and unauthenticated `/api/dogs/mine` returns401. Chrome rendered the live landing page and invitation-code field. The deployed PostgreSQL smoke passed 40 checks and removed all three synthetic accounts; safe output is in ignored `.local/smoke-cloud.log`. Its operator session logged out. Separate operator-session cleanup proved prior validation tokens invalid and final logout 204.
+
+GitHub Actions passed for deployed application commit `345a646dab81eb5bc6de57a65192ac8b3cbd7cae`, verified in Brave. Cloud Build succeeded and the deployed revision uses the recorded image digest in `RELEASE.md`. SQL backups 7 copies/deletion protection/no authorized IP ranges were inspected; no restore drill was performed.
+
+EAS preview/production target the actual HTTPS API. Expo config and production-targeted all-platform export passed to `.local/production-bundles`, including Android/iOS Hermes bundles with the canonical API origin. Native signed builds, app-store submission and physical devices remain unverified.

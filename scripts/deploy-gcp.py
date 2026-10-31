@@ -125,7 +125,7 @@ def bootstrap():
         operator={'id':result['user']['id'],'email':'operator@mypetpair.example'}
         operator_path.write_text(json.dumps(operator,indent=2))
         try:
-            urllib.request.urlopen(urllib.request.Request(url+'/api/auth/logout',data=b'',headers={'Authorization':'Bearer '+result['token']},method='POST'),timeout=30).read()
+            urllib.request.urlopen(urllib.request.Request(url+'/api/auth/logout',headers={'Authorization':'Bearer '+result['token']},method='POST'),timeout=30).read()
         except urllib.error.URLError:
             print('Bootstrap session logout failed; its bounded expiry still applies. Retry logout operationally.')
     run('run','services','update','mypetpair',f'--region={REGION}',f'--update-env-vars=APP_ADMIN_OWNER_IDS={operator["id"]}')
