@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en" data-theme="{{THEME}}">
+<head>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width,initial-scale=1">
+ <title>MyPetPair security verification</title>
+ <style>
+  :root{color-scheme:light;background:#f7f5ee;color:#183c32;font:16px system-ui,sans-serif}
+  :root[data-theme=dark]{color-scheme:dark;background:#15251f;color:#f2f5ee}
+  body{margin:0;padding:12px;box-sizing:border-box}p{font-size:13px;line-height:1.5;margin:0 0 12px}
+  altcha-widget{--altcha-max-width:100%;display:block;min-height:70px}
+  #status{margin-top:10px;font-size:13px}
+ </style>
+ <script nonce="{{NONCE}}" type="module" src="/captcha/widget.js"></script>
+</head>
+<body>
+ <p>Complete this privacy-friendly security check to continue. No visual puzzle or contact verification is required.</p>
+ <altcha-widget challenge="/api/captcha/challenge?purpose={{PURPOSE}}" workers="2" theme="{{THEME}}" configuration='{"humanInteractionSignature":false}'></altcha-widget>
+ <p id="status" role="status" aria-live="polite"></p>
+ <script nonce="{{NONCE}}">
+  window.addEventListener('load',function(){
+   const widget=document.querySelector('altcha-widget');
+   const status=document.getElementById('status');
+   function publish(payload){
+    const result={type:'altcha',payload:payload};
+    if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(JSON.stringify(result));
+    if(window.parent!==window)window.parent.postMessage(result,{{PARENT_ORIGIN}}||window.location.origin);
+   }
+   widget.addEventListener('verified',function(event){
+    const payload=event.detail&&event.detail.payload;
+    if(typeof payload!=='string'||!payload)return;
+    status.textContent='Security check complete. You can continue.';
+    publish(payload);
+   });
+   widget.addEventListener('expired',function(){publish('');status.textContent='Security check expired. Complete a new check.';});
+   widget.addEventListener('statechange',function(event){
+    if(event.detail&&event.detail.state!=='verified')publish('');
+    if(event.detail&&event.detail.state==='error'){publish('');status.textContent='Verification could not complete. Check your connection and retry.';}
+   });
+  });
+ </script>
+</body>
+</html>

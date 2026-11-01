@@ -4,6 +4,9 @@ export type User = {
   displayName: string;
   phone?: string | null;
   admin: boolean;
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
+  verificationNotice?: string;
 };
 export type Dog = {
   id: string;
@@ -34,6 +37,7 @@ export type Dog = {
   moderationReason?: string;
   archived?: boolean;
   unavailable?: boolean;
+  flagCount?: number;
 };
 export type DogWrite = {
   name: string;
@@ -54,7 +58,11 @@ export type DogWrite = {
   registry?: string;
   available: boolean;
 };
+export type Message = { id: number; interestId: string; senderId: string; body: string; clientMessageId: string; createdAt: string };
+export type MessagePage = { items: Message[]; hasMore: boolean; chatAvailable: boolean };
 export type Interest = {
+  chatAvailable: boolean;
+  unreadCount: number;
   id: string;
   maleDog: Dog;
   femaleDog: Dog;
@@ -71,6 +79,9 @@ export type Contacts = {
   };
 };
 export type Report = {
+  messageId?: number;
+  messageText?: string;
+  interestId?: string;
   id: string;
   dogId: string;
   reporterId: string;

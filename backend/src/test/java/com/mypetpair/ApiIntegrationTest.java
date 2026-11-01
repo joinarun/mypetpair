@@ -19,10 +19,10 @@ import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 
-@SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1", "app.admin-owner-ids=00000000-0000-0000-0000-000000000001", "app.auth-rate-limit=10000", "app.seed=false"})
+@SpringBootTest(properties={"app.captcha-test-workload=true","spring.datasource.url=jdbc:h2:mem:test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1", "app.admin-owner-ids=00000000-0000-0000-0000-000000000001", "app.auth-rate-limit=10000", "app.seed=false"})
 @AutoConfigureMockMvc
 class ApiIntegrationTest {
- @Autowired MockMvc mvc; @Autowired ObjectMapper json; @Autowired JdbcTemplate db;
+ @Autowired CaptchaService captcha; @Autowired MockMvc mvc; @Autowired ObjectMapper json; @Autowired JdbcTemplate db;
  final String password="Fictional-safe-pass-42";
  String a,b,c,admin,aid,bid,cid;
  @BeforeEach void setup() throws Exception {
@@ -33,9 +33,10 @@ class ApiIntegrationTest {
   a=(String)aa.get("token"); b=(String)bb.get("token"); c=(String)cc.get("token"); aid=id(aa);bid=id(bb);cid=id(cc);
  }
  @SuppressWarnings("unchecked") String id(Map<String,Object> auth){return (String)((Map<String,Object>)auth.get("user")).get("id");}
- Map<String,Object> register(String email) throws Exception { return call("POST","/api/auth/register",null,Map.of("email",email,"password",password,"displayName",email.substring(0,1),"adultConfirmed",true,"termsAccepted",true),201); }
+ Map<String,Object> register(String email) throws Exception { return call("POST","/api/auth/register",null,Map.of("email",email,"password",password,"displayName",email.substring(0,1),"phone","+1 202 555 0100","adultConfirmed",true,"termsAccepted",true),201); }
  String login(String email)throws Exception{return (String)call("POST","/api/auth/login",null,Map.of("email",email,"password",password),200).get("token");}
  @SuppressWarnings("unchecked") Map<String,Object> call(String method,String url,String token,Object body,int status)throws Exception{
+  if((url.equals("/api/auth/login")||url.equals("/api/auth/register"))&&body instanceof Map){var auth=new HashMap<String,Object>((Map<String,Object>)body);auth.put("captchaPayload",CaptchaTestSupport.solve(captcha,url.endsWith("login")?"login":"register"));body=auth;}
   var req=request(org.springframework.http.HttpMethod.valueOf(method),url); if(token!=null)req.header("Authorization","Bearer "+token);if(body!=null)req.contentType("application/json").content(json.writeValueAsBytes(body));
   MvcResult r=mvc.perform(req).andReturn(); assertEquals(status,r.getResponse().getStatus(),r.getResponse().getContentAsString()+" "+r.getResolvedException());
   return r.getResponse().getContentAsByteArray().length==0?Map.of():json.readValue(r.getResponse().getContentAsByteArray(),Map.class);
@@ -54,21 +55,21 @@ class ApiIntegrationTest {
   call("POST","/api/auth/register",null,Map.of("email","no@example.invalid","password",password,"displayName","No","adultConfirmed",false,"termsAccepted",true),400);
   call("POST","/api/auth/register",null,Map.of("email","long@example.invalid","password","猫".repeat(30),"displayName","Long","adultConfirmed",true,"termsAccepted",true),400);
   call("POST","/api/dogs",a,Map.of("name","Incomplete"),400);
-  String d=dog(a,"MALE",12.971234,false);call("PUT","/api/dogs/"+d,b,fields("MALE",13),404);call("GET","/api/dogs/"+d,b,null,404);
+  String d=dog(a,"MALE",12.971234,false);call("PUT","/api/dogs/"+d,b,fields("MALE",13),404);call("GET","/api/dogs/"+d,b,null,200);
   var own=call("GET","/api/dogs/"+d,a,null,200);assertEquals(12.97,((Number)own.get("latitude")).doubleValue());
   call("POST","/api/auth/logout",a,null,204);call("GET","/api/me",a,null,401);
  }
  @Test void discoveryFiltersPrivacyAndModeration()throws Exception{
   String mine=dog(a,"MALE",12.97,true),near=dog(b,"FEMALE",12.98,true);dog(c,"FEMALE",13.1,true);dog(b,"FEMALE",12.99,false);
-  var result=call("GET","/api/discovery?dogId="+mine+"&radiusKm=50&sex=FEMALE",a,null,200);var items=(List<Map<String,Object>>)result.get("items");assertEquals(2,items.size());assertEquals(near,items.get(0).get("id"));String encoded=json.writeValueAsString(items);assertFalse(encoded.contains("latitude"));assertFalse(encoded.contains("longitude"));assertFalse(encoded.contains("email"));assertFalse(encoded.contains("birthDate"));assertFalse(encoded.contains("distanceKm"));
+  var result=call("GET","/api/discovery?dogId="+mine+"&radiusKm=50&sex=FEMALE",a,null,200);var items=(List<Map<String,Object>>)result.get("items");assertEquals(3,items.size());assertEquals(near,items.get(0).get("id"));String encoded=json.writeValueAsString(items);assertFalse(encoded.contains("latitude"));assertFalse(encoded.contains("longitude"));assertFalse(encoded.contains("email"));assertFalse(encoded.contains("birthDate"));assertFalse(encoded.contains("distanceKm"));
   assertTrue(((List<?>)call("GET","/api/discovery?dogId="+mine+"&breed=Poodle",a,null,200).get("items")).isEmpty());
   call("GET","/api/discovery?dogId="+near,a,null,404);call("GET","/api/discovery?dogId="+mine+"&radiusKm=999",a,null,400);
-  call("PUT","/api/dogs/"+near,b,fields("FEMALE",12.98),200);call("GET","/api/dogs/"+near,a,null,404);
+  call("PUT","/api/dogs/"+near,b,fields("FEMALE",12.98),200);call("GET","/api/dogs/"+near,a,null,200);
  }
  @Test void photosArePrivateAndInvalidContentRejected()throws Exception{
   String d=dog(a,"MALE",12.97,false);var own=call("GET","/api/dogs/"+d,a,null,200);String p=(String)((List<?>)own.get("photoIds")).get(0);
   var read=mvc.perform(get("/api/photos/"+p).header("Authorization","Bearer "+a)).andReturn();assertEquals(200,read.getResponse().getStatus());assertEquals("image/jpeg",read.getResponse().getContentType());assertNotNull(ImageIO.read(new java.io.ByteArrayInputStream(read.getResponse().getContentAsByteArray())));assertTrue(new String(image(),java.nio.charset.StandardCharsets.ISO_8859_1).contains("private-source-location"));assertFalse(new String(read.getResponse().getContentAsByteArray(),java.nio.charset.StandardCharsets.ISO_8859_1).contains("private-source-location"));
-  call("GET","/api/photos/"+p,b,null,404);
+  assertEquals(401,mvc.perform(get("/api/photos/"+p)).andReturn().getResponse().getStatus());
   assertEquals(200,mvc.perform(get("/api/photos/"+p).header("Authorization","Bearer "+admin)).andReturn().getResponse().getStatus());
   var r=mvc.perform(multipart("/api/dogs/"+d+"/photos").file(new MockMultipartFile("file","bad.jpg","image/jpeg","not-an-image".getBytes())).header("Authorization","Bearer "+a)).andReturn();assertEquals(400,r.getResponse().getStatus());
   var tooLarge=mvc.perform(multipart("/api/dogs/"+d+"/photos").file(new MockMultipartFile("file","large.jpg","image/jpeg",new byte[5*1024*1024+1])).header("Authorization","Bearer "+a)).andReturn();assertEquals(413,tooLarge.getResponse().getStatus());
@@ -87,7 +88,7 @@ class ApiIntegrationTest {
   call("GET",url,c,null,404);call("PUT",url,b,Map.of("shareEmail",true,"sharePhone",false),200);
   assertTrue(json.writeValueAsString(call("GET",url,a,null,200)).contains("b@example.invalid"));assertFalse(json.writeValueAsString(call("GET",url,b,null,200)).contains("a@example.invalid"));
   call("PUT",url,b,Map.of("shareEmail",false,"sharePhone",false),200);assertFalse(json.writeValueAsString(call("GET",url,a,null,200)).contains("b@example.invalid"));
-  call("PUT",url,b,Map.of("shareEmail",false,"sharePhone",true),400);
+  call("PUT",url,b,Map.of("shareEmail",false,"sharePhone",true),200);
  }
  @Test void blockClosesConnectionsAndRedactsPhotos()throws Exception{
   String i=accepted(),url="/api/interests/"+i+"/contacts";call("PUT",url,b,Map.of("shareEmail",true,"sharePhone",false),200);
@@ -95,12 +96,13 @@ class ApiIntegrationTest {
   var hiddenHistory=list("/api/interests",a);String encoded=json.writeValueAsString(hiddenHistory);assertTrue(encoded.contains("Unavailable profile"));assertFalse(encoded.contains("b@example.invalid"));assertEquals(bid,((Map<?,?>)hiddenHistory.get(0).get("femaleDog")).get("ownerId"));
   call("DELETE","/api/blocks/"+bid,a,null,204);call("GET",url,a,null,409);
  }
- @Test void editedDogRevokesContactVisibilityAndCanStillClose()throws Exception{
-  String i=accepted();var row=db.queryForMap("select female_dog_id from interests where id=?",i);String f=(String)row.get("female_dog_id");
+ @Test void editedDogRemainsPublishedButRevokesContactGrantsAndCanStillClose()throws Exception{
+  String i=accepted();String f=(String)db.queryForMap("select female_dog_id from interests where id=?",i).get("female_dog_id");
   call("PUT","/api/interests/"+i+"/contacts",b,Map.of("shareEmail",true,"sharePhone",false),200);call("PUT","/api/dogs/"+f,b,fields("FEMALE",12.98),200);
-  call("GET","/api/interests/"+i+"/contacts",a,null,409);assertTrue(json.writeValueAsString(list("/api/interests",a)).contains("Unavailable profile"));
-  call("PUT","/api/interests/"+i+"/contacts",b,Map.of("shareEmail",false,"sharePhone",false),200);call("POST","/api/interests/"+i+"/decision",a,Map.of("action","CLOSE"),200);
-  var history=list("/api/interests",a);var hidden=(Map<?,?>)history.get(0).get("femaleDog");assertEquals(bid,hidden.get("ownerId"));assertEquals(true,hidden.get("unavailable"));assertFalse(hidden.containsKey("healthSummary"));assertFalse(hidden.containsKey("latitude"));assertFalse(hidden.containsKey("email"));call("POST","/api/blocks",a,Map.of("ownerId",hidden.get("ownerId")),204);assertEquals(bid,list("/api/blocks",a).get(0).get("ownerId"));
+  assertFalse(json.writeValueAsString(call("GET","/api/interests/"+i+"/contacts",a,null,200)).contains("b@example.invalid"));
+  assertEquals(true,list("/api/interests",a).get(0).get("chatAvailable"));
+  call("POST","/api/interests/"+i+"/decision",a,Map.of("action","CLOSE"),200);call("GET","/api/interests/"+i+"/contacts",a,null,409);
+  call("POST","/api/blocks",a,Map.of("ownerId",bid),204);assertEquals(bid,list("/api/blocks",a).get(0).get("ownerId"));
  }
  @Test void moderationReportsExportAndDeletion()throws Exception{
   String i=accepted();String f=(String)db.queryForMap("select female_dog_id from interests where id=?",i).get("female_dog_id");
@@ -146,4 +148,48 @@ class ApiIntegrationTest {
   d.put("birthDate",LocalDate.now().minusYears(3).toString());d.put("vetCheckedOn",LocalDate.now().minusYears(2).toString());call("PUT","/api/dogs/"+id,a,d,200);call("POST","/api/admin/dogs/"+id+"/moderation",admin,Map.of("status","APPROVED","reason","Review"),400);
   var e=call("GET","/api/entitlements",a,null,200);assertEquals("FREE",e.get("plan"));assertEquals(true,e.get("unlimitedViews"));
  }
+ @Test void openRegistrationRequiresMobileAndPublishesWithoutOperatorApproval()throws Exception{
+  var missing=new HashMap<String,Object>();missing.putAll(Map.of("email","new@example.invalid","password",password,"displayName","New","adultConfirmed",true,"termsAccepted",true));call("POST","/api/auth/register",null,missing,400);missing.put("phone","abc");call("POST","/api/auth/register",null,missing,400);missing.put("phone","+91 98765 43210");var auth=call("POST","/api/auth/register",null,missing,201);var user=(Map<?,?>)auth.get("user");assertEquals(false,user.get("emailVerified"));assertEquals(false,user.get("phoneVerified"));assertEquals(true,user.get("profileComplete"));assertEquals(false,user.get("admin"));
+  String d=dog(a,"MALE",12.97,false);assertEquals("APPROVED",call("GET","/api/dogs/"+d,a,null,200).get("moderation"));call("GET","/api/dogs/"+d,b,null,200);call("PATCH","/api/me",a,Map.of("displayName","Owner","phone",""),400);
+ }
+ @Test void elevenDistinctOpenReportersSuspendDuplicateReportsCountOnceAndEditsCannotEscape()throws Exception{
+  String d=dog(b,"FEMALE",12.98,false);call("POST","/api/reports",b,Map.of("dogId",d,"reason","OTHER"),400);
+  var first=call("POST","/api/reports",a,Map.of("dogId",d,"reason","HARASSMENT","details","First"),201);var repeat=call("POST","/api/reports",a,Map.of("dogId",d,"reason","OTHER"),201);assertEquals(first.get("id"),repeat.get("id"));
+  for(int n=0;n<10;n++){String t=(String)register("flag"+n+"@example.invalid").get("token");call("POST","/api/reports",t,Map.of("dogId",d,"reason","FRAUD"),201);assertEquals(n==9?"SUSPENDED":"APPROVED",db.queryForObject("select moderation from dogs where id=?",String.class,d));}
+  assertEquals(11,db.queryForObject("select count(distinct reporter_id) from reports where dog_id=?",Integer.class,d));call("GET","/api/dogs/"+d,a,null,404);call("PUT","/api/dogs/"+d,b,fields("FEMALE",12.98),200);assertEquals("SUSPENDED",db.queryForObject("select moderation from dogs where id=?",String.class,d));
+  assertEquals(201,mvc.perform(multipart("/api/dogs/"+d+"/photos").file(new MockMultipartFile("file","dog.png","image/png",image())).header("Authorization","Bearer "+b)).andReturn().getResponse().getStatus());assertEquals("SUSPENDED",db.queryForObject("select moderation from dogs where id=?",String.class,d));
+  var exported=call("GET","/api/me/export",b,null,200);assertTrue(((List<?>)exported.get("reports")).isEmpty());call("POST","/api/admin/dogs/"+d+"/moderation",admin,Map.of("status","APPROVED","reason","Appeal"),400);call("POST","/api/admin/reports/"+first.get("id")+"/resolve",admin,Map.of("resolution","Appeal reviewed"),200);call("POST","/api/admin/dogs/"+d+"/moderation",admin,Map.of("status","APPROVED","reason","Appeal reviewed"),200);
+ }
+ @Test void chatRequiresAcceptedActiveConnectionAndDeduplicatesRetries()throws Exception{
+  String m=dog(a,"MALE",12.97,false),f=dog(b,"FEMALE",12.98,false),i=interest(m,f),url="/api/interests/"+i+"/messages";var payload=Map.of("clientMessageId",UUID.randomUUID().toString(),"body","Hello about our dogs");
+  call("GET",url,a,null,409);call("POST",url,a,payload,409);call("GET",url,c,null,404);call("POST","/api/interests/"+i+"/decision",b,Map.of("action","ACCEPT"),200);
+  call("GET",url,null,null,401);call("POST",url,c,payload,404);call("GET",url,admin,null,404);
+  var sent=call("POST",url,a,payload,200);assertEquals(sent.get("id"),call("POST",url,a,payload,200).get("id"));assertEquals(1,db.queryForObject("select count(*) from chat_messages where interest_id=?",Integer.class,i));assertEquals(1,((Number)list("/api/interests",b).get(0).get("unreadCount")).intValue());assertEquals(0,((Number)list("/api/interests",a).get(0).get("unreadCount")).intValue());
+  call("POST",url,a,Map.of("clientMessageId",payload.get("clientMessageId"),"body","Changed retry"),409);call("POST",url,a,Map.of("clientMessageId",UUID.randomUUID().toString(),"body"," "),400);call("POST",url,a,Map.of("clientMessageId",UUID.randomUUID().toString(),"body","x".repeat(2001)),400);call("POST",url,a,Map.of("clientMessageId","not-a-uuid","body","Hello"),400);
+  call("PUT",url+"/read",b,Map.of("messageId",sent.get("id")),204);assertEquals(0,((Number)list("/api/interests",b).get(0).get("unreadCount")).intValue());call("GET",url+"?size=51",a,null,400);call("POST",url,a,Map.of("clientMessageId",UUID.randomUUID().toString(),"body","x"+Character.toString(0)+"x"),400);for(int n=0;n<29;n++)db.update("insert into chat_messages(interest_id,sender_id,body,client_message_id,created_at) values(?,?,?,?,?)",i,aid,"Rate fixture",UUID.randomUUID().toString(),PairService.now());call("POST",url,a,Map.of("clientMessageId",UUID.randomUUID().toString(),"body","Too many"),429);
+  call("POST","/api/interests/"+i+"/decision",b,Map.of("action","CLOSE"),200);call("GET",url,a,null,409);call("POST",url,b,Map.of("clientMessageId",UUID.randomUUID().toString(),"body","After close"),409);call("PUT",url+"/read",b,Map.of("messageId",sent.get("id")),409);
+ }
+ @Test void chatPaginationReportsHistoricalMessagesAndOwnExportStayScoped()throws Exception{
+  String i=accepted(),url="/api/interests/"+i+"/messages";List<Map<String,Object>> messages=new ArrayList<>();for(int n=0;n<3;n++)messages.add(call("POST",url,a,Map.of("clientMessageId",UUID.randomUUID().toString(),"body","Private conversation "+n),200));
+  String male=(String)db.queryForMap("select male_dog_id from interests where id=?",i).get("male_dog_id");String other=interest(male,dog(b,"FEMALE",12.99,false));call("POST","/api/interests/"+other+"/decision",b,Map.of("action","ACCEPT"),200);var foreign=call("POST","/api/interests/"+other+"/messages",b,Map.of("clientMessageId",UUID.randomUUID().toString(),"body","Different thread"),200);call("GET",url+"?beforeId="+foreign.get("id"),a,null,400);call("PUT",url+"/read",a,Map.of("messageId",foreign.get("id")),404);
+  var newest=call("GET",url+"?size=2",b,null,200);assertEquals(true,newest.get("hasMore"));var items=(List<Map<String,Object>>)newest.get("items");assertEquals(messages.get(1).get("id"),items.get(0).get("id"));var older=call("GET",url+"?size=2&beforeId="+items.get(0).get("id"),b,null,200);assertEquals(1,((List<?>)older.get("items")).size());assertEquals(false,older.get("hasMore"));
+  call("PUT",url+"/read",b,Map.of("messageId",messages.get(2).get("id")),204);call("PUT",url+"/read",b,Map.of("messageId",messages.get(0).get("id")),204);assertEquals(((Number)messages.get(2).get("id")).longValue(),db.queryForObject("select last_message_id from chat_reads where interest_id=? and owner_id=?",Long.class,i,bid));
+  long mid=((Number)messages.get(0).get("id")).longValue();call("POST","/api/messages/"+mid+"/report",c,Map.of("reason","HARASSMENT"),404);call("POST","/api/messages/"+mid+"/report",a,Map.of("reason","HARASSMENT"),400);
+  call("POST","/api/blocks",b,Map.of("ownerId",aid),204);call("GET",url,b,null,409);var report=call("POST","/api/messages/"+mid+"/report",b,Map.of("reason","HARASSMENT","details","Review this message"),201);assertEquals(report.get("id"),call("POST","/api/messages/"+mid+"/report",b,Map.of("reason","HARASSMENT"),201).get("id"));var reports=list("/api/admin/reports",admin);assertEquals("Private conversation 0",reports.get(0).get("messageText"));assertEquals(i,reports.get(0).get("interestId"));
+  assertEquals(4,((List<?>)call("GET","/api/me/export",b,null,200).get("messages")).size());assertTrue(((List<?>)call("GET","/api/me/export",c,null,200).get("messages")).isEmpty());
+  call("DELETE","/api/me",a,Map.of("password",password),204);assertEquals(0,db.queryForObject("select count(*) from chat_messages where interest_id=?",Integer.class,i));assertEquals(0,db.queryForObject("select count(*) from chat_reads where interest_id=?",Integer.class,i));assertEquals(0,db.queryForObject("select count(*) from reports where id=?",Integer.class,report.get("id")));
+ }
+ @Test void operatorCanRemovePhotoWithAuditAndNormalOwnersCannot()throws Exception{
+  String d=dog(a,"MALE",12.97,false);String p=(String)((List<?>)call("GET","/api/dogs/"+d,a,null,200).get("photoIds")).get(0);String url="/api/admin/dogs/"+d+"/photos/"+p;
+  call("DELETE",url,b,Map.of("reason","Policy issue"),403);call("DELETE",url,admin,Map.of("reason",""),400);call("DELETE",url,admin,Map.of("reason","Uploaded personal content"),204);call("GET","/api/photos/"+p,a,null,404);assertEquals(1,db.queryForObject("select count(*) from audit_events where action='PHOTO_REMOVED' and target_id=?",Integer.class,p));
+ }
+ @Test void webpImageIsDecodedAndReencodedAsMetadataFreeJpeg()throws Exception{
+  byte[] webp=Base64.getDecoder().decode("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA");String d=(String)call("POST","/api/dogs",a,fields("MALE",12.97),201).get("id");var r=mvc.perform(multipart("/api/dogs/"+d+"/photos").file(new MockMultipartFile("file","dog.webp","image/webp",webp)).header("Authorization","Bearer "+a)).andReturn();assertEquals(201,r.getResponse().getStatus(),r.getResponse().getContentAsString());String p=(String)json.readValue(r.getResponse().getContentAsByteArray(),Map.class).get("id");var photo=mvc.perform(get("/api/photos/"+p).header("Authorization","Bearer "+a)).andReturn();assertEquals("image/jpeg",photo.getResponse().getContentType());assertNotNull(ImageIO.read(new java.io.ByteArrayInputStream(photo.getResponse().getContentAsByteArray())));
+ }
+
+ @Test void concurrentChatRetryAndBlockPreserveOneMessageAndCloseAccess()throws Exception{
+  String i=accepted(),url="/api/interests/"+i+"/messages";var payload=Map.of("clientMessageId",UUID.randomUUID().toString(),"body","Concurrent hello");var pool=Executors.newFixedThreadPool(2);var start=new CountDownLatch(1);List<Future<Integer>> out=new ArrayList<>();for(int n=0;n<2;n++)out.add(pool.submit(()->{start.await();return mvc.perform(post(url).header("Authorization","Bearer "+a).contentType("application/json").content(json.writeValueAsBytes(payload))).andReturn().getResponse().getStatus();}));start.countDown();for(var result:out)assertEquals(200,result.get());assertEquals(1,db.queryForObject("select count(*) from chat_messages where interest_id=?",Integer.class,i));
+  var begin=new CountDownLatch(1);var send=pool.submit(()->{begin.await();return mvc.perform(post(url).header("Authorization","Bearer "+a).contentType("application/json").content(json.writeValueAsBytes(Map.of("clientMessageId",UUID.randomUUID().toString(),"body","Racing block")))).andReturn().getResponse().getStatus();});var block=pool.submit(()->{begin.await();return mvc.perform(post("/api/blocks").header("Authorization","Bearer "+b).contentType("application/json").content(json.writeValueAsBytes(Map.of("ownerId",aid)))).andReturn().getResponse().getStatus();});begin.countDown();assertTrue(Set.of(200,409).contains(send.get()));assertEquals(204,block.get());pool.shutdown();call("GET",url,a,null,409);call("GET",url,b,null,409);
+ }
+
 }

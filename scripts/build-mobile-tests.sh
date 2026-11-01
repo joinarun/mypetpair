@@ -11,8 +11,8 @@ case "${1:-}" in
     npx expo prebuild --platform android --no-install
     cd android
     ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,x86_64 --max-workers=4
-    cp app/build/outputs/apk/release/app-release.apk "$OUT/MyPetPair-1.0.0-android-test.apk"
-    (cd "$OUT" && shasum -a 256 MyPetPair-1.0.0-android-test.apk > SHA256SUMS.txt)
+    cp app/build/outputs/apk/release/app-release.apk "$OUT/MyPetPair-1.1.0-android-test.apk"
+    (cd "$OUT" && shasum -a 256 MyPetPair-1.1.0-android-test.apk > SHA256SUMS.txt)
     ;;
   *) echo 'Usage: scripts/build-mobile-tests.sh android' >&2; exit 2 ;;
 esac

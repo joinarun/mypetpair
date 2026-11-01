@@ -51,9 +51,9 @@ def provision():
         grant_sa(BUILDER,role)
     if not exists('artifacts','repositories','describe','mypetpair',f'--location={REGION}','--format=value(name)'):
         run('artifacts','repositories','create','mypetpair',f'--location={REGION}','--repository-format=docker','--description=MyPetPair application images')
-    if not exists('secrets','describe','mypetpair-invitation','--format=value(name)'):
-        save_secret('mypetpair-invitation',secrets.token_urlsafe(32))
-    for name in ['mypetpair-db-password','mypetpair-invitation']:
+    if not exists('secrets','describe','mypetpair-captcha-hmac','--format=value(name)'):
+        save_secret('mypetpair-captcha-hmac',secrets.token_urlsafe(48))
+    for name in ['mypetpair-db-password','mypetpair-captcha-hmac']:
         if name=='mypetpair-db-password' and not exists('secrets','describe',name,'--format=value(name)'):
             save_secret(name,secrets.token_urlsafe(36))
         run('secrets','add-iam-policy-binding',name,f'--member=serviceAccount:{RUNTIME}','--role=roles/secretmanager.secretAccessor','--format=none')
@@ -72,7 +72,7 @@ def provision():
         flags=LOCAL/'db-user-flags.json'; flags.write_text(json.dumps({'--password':secret('mypetpair-db-password'),'--instance':INSTANCE})); flags.chmod(0o600)
         try: run('sql','users','create','mypetpair',f'--flags-file={flags}')
         finally: flags.unlink(missing_ok=True)
-    print('Provisioned pilot infrastructure; SQL connector has no authorized public networks. Secrets stored in Secret Manager.')
+    print('Provisioned application infrastructure; SQL connector has no authorized public networks. Secrets stored in Secret Manager.')
 
 def build():
     dirty=subprocess.check_output(['git','status','--porcelain'],cwd=ROOT,text=True).strip()
@@ -94,9 +94,9 @@ def deploy():
     if status!='SUCCESS': raise RuntimeError('Build not successful yet: '+str(status))
     admin=''
     if (LOCAL/'operator.json').exists(): admin=json.loads((LOCAL/'operator.json').read_text())['id']
-    env={'DB_URL':f'jdbc:postgresql:///mypetpair?cloudSqlInstance={PROJECT}:{REGION}:{INSTANCE}&socketFactory=com.google.cloud.sql.postgres.SocketFactory&cloudSqlRefreshStrategy=lazy','DB_USERNAME':'mypetpair','APP_INVITATION_REQUIRED':'true','APP_SEED':'false','APP_ADMIN_OWNER_IDS':admin,'CORS_ALLOWED_ORIGINS':''}
+    env={'DB_URL':f'jdbc:postgresql:///mypetpair?cloudSqlInstance={PROJECT}:{REGION}:{INSTANCE}&socketFactory=com.google.cloud.sql.postgres.SocketFactory&cloudSqlRefreshStrategy=lazy','DB_USERNAME':'mypetpair','APP_SEED':'false','APP_ADMIN_OWNER_IDS':admin,'CORS_ALLOWED_ORIGINS':''}
     path=LOCAL/'run-env.json'; path.write_text(json.dumps(env)); path.chmod(0o600)
-    run('run','deploy','mypetpair',f'--region={REGION}',f'--image={state["image"]}',f'--service-account={RUNTIME}',f'--add-cloudsql-instances={PROJECT}:{REGION}:{INSTANCE}',f'--env-vars-file={path}','--set-secrets=DB_PASSWORD=mypetpair-db-password:latest,APP_INVITATION_CODE=mypetpair-invitation:latest','--memory=1Gi','--cpu=1','--min-instances=0','--max-instances=2','--concurrency=20','--timeout=60','--allow-unauthenticated','--port=8080')
+    run('run','deploy','mypetpair',f'--region={REGION}',f'--image={state["image"]}',f'--service-account={RUNTIME}',f'--add-cloudsql-instances={PROJECT}:{REGION}:{INSTANCE}',f'--env-vars-file={path}','--set-secrets=DB_PASSWORD=mypetpair-db-password:latest,APP_CAPTCHA_HMAC_SECRET=mypetpair-captcha-hmac:latest','--memory=1Gi','--cpu=1','--min-instances=0','--max-instances=2','--concurrency=20','--timeout=60','--allow-unauthenticated','--port=8080')
     url=run('run','services','describe','mypetpair',f'--region={REGION}','--format=value(status.url)',capture=True)
     state['url']=url; (LOCAL/'deployment.json').write_text(json.dumps(state,indent=2))
     print('Application URL: '+url)
@@ -107,27 +107,7 @@ def bootstrap():
     if operator_path.exists():
         operator=json.loads(operator_path.read_text())
     else:
-        name='mypetpair-operator-password'
-        if exists('secrets','describe',name,'--format=value(name)'):
-            pwd=secret(name)
-        else:
-            pwd=secrets.token_urlsafe(24)
-            save_secret(name,pwd)
-        payload={'email':'operator@mypetpair.example','password':pwd,'displayName':'MyPetPair operator','adultConfirmed':True,'termsAccepted':True,'invitationCode':secret('mypetpair-invitation')}
-        def auth(path,body):
-            req=urllib.request.Request(url+path,data=json.dumps(body).encode(),headers={'Content-Type':'application/json'},method='POST')
-            return json.loads(urllib.request.urlopen(req,timeout=60).read())
-        try:
-            result=auth('/api/auth/register',payload)
-        except urllib.error.HTTPError as error:
-            if error.code!=409: raise
-            result=auth('/api/auth/login',{'email':payload['email'],'password':pwd})
-        operator={'id':result['user']['id'],'email':'operator@mypetpair.example'}
-        operator_path.write_text(json.dumps(operator,indent=2))
-        try:
-            urllib.request.urlopen(urllib.request.Request(url+'/api/auth/logout',headers={'Authorization':'Bearer '+result['token']},method='POST'),timeout=30).read()
-        except urllib.error.URLError:
-            print('Bootstrap session logout failed; its bounded expiry still applies. Retry logout operationally.')
+        raise RuntimeError('Create an operator account with mobile and CAPTCHA through the app, then save its immutable ID in .local/operator.json; never grant roles by unverified email')
     run('run','services','update','mypetpair',f'--region={REGION}',f'--update-env-vars=APP_ADMIN_OWNER_IDS={operator["id"]}')
     print('Operator provisioned; login email operator@mypetpair.example; password in Secret Manager mypetpair-operator-password. No credential printed.')
 

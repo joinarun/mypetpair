@@ -9,13 +9,13 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api")
 public class ApiController {
- final PairService service; final EntitlementPolicy entitlements;
- ApiController(PairService service,EntitlementPolicy entitlements){this.service=service;this.entitlements=entitlements;}
+ final PairService service; final EntitlementPolicy entitlements; final CaptchaService captcha;
+ ApiController(PairService service,EntitlementPolicy entitlements,CaptchaService captcha){this.service=service;this.entitlements=entitlements;this.captcha=captcha;}
  @SuppressWarnings("unchecked") Map<String,Object> owner(HttpServletRequest r){return (Map<String,Object>)r.getAttribute("owner");}
  @GetMapping("/health") Map<String,Object> health(){return service.health();}
  @GetMapping("/config") Map<String,Object> config(){return service.config();}
- @PostMapping("/auth/register") @ResponseStatus(HttpStatus.CREATED) Map<String,Object> register(@RequestBody Map<String,Object> in){return service.register(in);}
- @PostMapping("/auth/login") Map<String,Object> login(@RequestBody Map<String,Object> in){return service.login(in);}
+ @PostMapping("/auth/register") @ResponseStatus(HttpStatus.CREATED) Map<String,Object> register(@RequestBody Map<String,Object> in){captcha.consume(PairService.str(in,"captchaPayload"),"register");return service.register(in);}
+ @PostMapping("/auth/login") Map<String,Object> login(@RequestBody Map<String,Object> in){captcha.consume(PairService.str(in,"captchaPayload"),"login");return service.login(in);}
  @PostMapping("/auth/logout") @ResponseStatus(HttpStatus.NO_CONTENT) void logout(HttpServletRequest r){service.logout((String)r.getAttribute("token"));}
  @GetMapping("/me") Map<String,Object> me(HttpServletRequest r){return service.me(owner(r));}
  @PatchMapping("/me") Map<String,Object> me(HttpServletRequest r,@RequestBody Map<String,Object> in){return service.updateMe(owner(r),in);}
@@ -36,11 +36,16 @@ public class ApiController {
  @PostMapping("/interests/{id}/decision") Map<String,Object> decision(HttpServletRequest r,@PathVariable String id,@RequestBody Map<String,Object> in){return service.decision(owner(r),id,in);}
  @GetMapping("/interests/{id}/contacts") Map<String,Object> contacts(HttpServletRequest r,@PathVariable String id){return service.contacts(owner(r),id);}
  @PutMapping("/interests/{id}/contacts") Map<String,Object> grant(HttpServletRequest r,@PathVariable String id,@RequestBody Map<String,Object> in){return service.setContacts(owner(r),id,in);}
+ @GetMapping("/interests/{id}/messages") Map<String,Object> messages(HttpServletRequest r,@PathVariable String id,@RequestParam(defaultValue="0")long beforeId,@RequestParam(defaultValue="50")int size){return service.messages(owner(r),id,beforeId,size);}
+ @PostMapping("/interests/{id}/messages") Map<String,Object> sendMessage(HttpServletRequest r,@PathVariable String id,@RequestBody Map<String,Object> in){return service.sendMessage(owner(r),id,in);}
+ @PutMapping("/interests/{id}/messages/read") @ResponseStatus(HttpStatus.NO_CONTENT) void readMessages(HttpServletRequest r,@PathVariable String id,@RequestBody Map<String,Object> in){service.markMessagesRead(owner(r),id,in);}
+ @PostMapping("/messages/{id}/report") @ResponseStatus(HttpStatus.CREATED) Map<String,Object> reportMessage(HttpServletRequest r,@PathVariable long id,@RequestBody Map<String,Object> in){return service.reportMessage(owner(r),id,in);}
+ @DeleteMapping("/admin/dogs/{dogId}/photos/{photoId}") @ResponseStatus(HttpStatus.NO_CONTENT) void adminDeletePhoto(HttpServletRequest r,@PathVariable String dogId,@PathVariable String photoId,@RequestBody Map<String,Object> in){service.adminDeletePhoto(owner(r),dogId,photoId,in);}
  @GetMapping("/blocks") List<Map<String,Object>> blocks(HttpServletRequest r){return service.blocks(owner(r));}
  @PostMapping("/blocks") @ResponseStatus(HttpStatus.NO_CONTENT) void block(HttpServletRequest r,@RequestBody Map<String,Object> in){service.block(owner(r),in);}
  @DeleteMapping("/blocks/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void unblock(HttpServletRequest r,@PathVariable String id){service.unblock(owner(r),id);}
  @PostMapping("/reports") @ResponseStatus(HttpStatus.CREATED) Map<String,Object> report(HttpServletRequest r,@RequestBody Map<String,Object> in){return service.report(owner(r),in);}
- @GetMapping("/admin/dogs") List<Map<String,Object>> adminDogs(HttpServletRequest r,@RequestParam(defaultValue="PENDING")String status){return service.adminDogs(owner(r),status);}
+ @GetMapping("/admin/dogs") List<Map<String,Object>> adminDogs(HttpServletRequest r,@RequestParam(defaultValue="APPROVED")String status){return service.adminDogs(owner(r),status);}
  @PostMapping("/admin/dogs/{id}/moderation") Map<String,Object> moderate(HttpServletRequest r,@PathVariable String id,@RequestBody Map<String,Object> in){return service.moderate(owner(r),id,in);}
  @GetMapping("/admin/reports") List<Map<String,Object>> reports(HttpServletRequest r){return service.reports(owner(r));}
  @PostMapping("/admin/reports/{id}/resolve") Map<String,Object> resolve(HttpServletRequest r,@PathVariable String id,@RequestBody Map<String,Object> in){return service.resolve(owner(r),id,in);}

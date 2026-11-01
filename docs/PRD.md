@@ -1,126 +1,51 @@
-# MyPetPair product requirements
+# MyPetPair product requirements — version 2.0
 
-Version 1.0 • Baseline adopted under the product owner's instruction to make wise decisions autonomously • 31 October 2026
+Adopted 1 November 2026 from the product owner's explicit instructions. Supersedes invitation-gated signup, prior profile approval, JPEG/PNG-only media and absence of chat in [v1](history/PRD-1.0.md). [Implementation feature](../specs/002-open-registration-chat/spec.md). Web, Android and iOS share the Expo client; Spring Boot/PostgreSQL remains the backend. Initial service is free; no payments.
 
-MyPetPair helps adult dog owners discover nearby dogs and form owner-controlled connections for investigating responsible breeding. A match is an introduction, never a veterinary recommendation, pedigree certification, breeding agreement, or sale.
+## Goals, actors and boundaries
 
-## Stage 1 clarification and decisions
+Adult dog owners manage multiple dogs, discover nearby profiles and form responsible owner-controlled connections. Male owners initiate interest; female owners decide. Operators react to reports and remove inappropriate photos. A connection is an introduction, never a health certification or breeding recommendation. Public visitors can register; profile discovery remains authenticated. Owner contact data stays private until the owner grants access. No identity or veterinary certification is implied.
 
-### Confirmed requirements
+## Confirmed changes and journeys
 
-C1. Accounts manage multiple dog profiles. C2. Profiles contain photos, breed, age and location. C3. Discovery prioritizes proximity. C4. Male-dog owners send interest; female-dog owners decide acceptance. C5. Contact details remain private until permission. C6. Initial service is free, with a future entitlement foundation and no payments. C7. Web, Android and iOS clients use a Java Spring Boot API. C8. Use Spec Kit before implementation, publish the project to GitHub using Brave, and deploy to GCP project `mypetpair` (248924650823), using Chrome if console access is needed.
+1. Any adult can register with display name, email, mobile number, password, adult/terms acknowledgement and valid CAPTCHA; no invitation is required or accepted as authorization. Login also requires a fresh CAPTCHA. Email and mobile verification are NOT required in this phase; both are explicitly labelled unverified, verification is phase 2. Existing owners can sign in with missing legacy mobile and are prompted to supply it; updates require valid mobile. Mobile is stored privately, not displayed in profiles or shared automatically.
+2. Owners create/edit dog profiles and upload JPEG, PNG or WebP photos. Eligible, available dogs with a photo appear automatically; no approval queue or reapproval on edits. Ineligible/incomplete profiles can be saved privately. Existing pending profiles become published-status profiles; this does not override eligibility, availability or archival checks. Existing suspensions persist. Editing a suspended profile never bypasses suspension.
+3. Discovery remains proximity-first, using selected owned dog's quantized location, radius 1–500km, sex/breed/age filters, nearest/age/newest sorting, stable pagination max50. Owners never receive exact coordinates, distance or private contacts in profile responses. Max20 dogs/account, max6 photos/dog; photo limits remain 5MB/16MP with metadata removal/re-encoding and edge1600px.
+4. Interest transitions remain PENDING→ACCEPTED/DECLINED/WITHDRAWN/EXPIRED(30d), ACCEPTED→CLOSED. Only female owner accepts/declines; male owner withdraws; either closes. Duplicate active dog pairs prevented atomically. Multiple connections allowed.
+5. Accepted active connections unlock private text chat. Only the two owners can read/send/mark read. Chat requires both dogs to remain available, eligible, published, unarchived and unblocked with original sex roles. Closing/blocking/suspension/ineligibility removes access on next request. Repeated acceptance reuses the thread. No contacts are exposed automatically; optional email/phone grants remain independent and revocable. A sender may deliberately type their own contact info in chat; warn that recipients can copy messages.
+6. Messages are 1–2000 characters, plain text, timestamped, paginated and persisted. Sending has pending/error/success states; retrying the same client message ID never duplicates a message. Unread counts and own read markers support multiple devices. Periodic foreground refresh, with manual refresh and error states, is sufficient; background polling stops. No attachments, typing indicators, push notifications, read receipts to others or end-to-end encryption in this phase.
+7. Any distinct other owner can flag a visible dog with welfare/fraud/harassment/privacy/other reason. One user's repeated reports count once per dog; the eleventh distinct unresolved reporter suspends the dog atomically. Counts never identify reporters or expose report details to the dog owner. Message participants can report a specific received message even after close/block; operator sees only the reported message snapshot, not arbitrary chat history. Operators can suspend or reinstate with a reason, remove any dog photo with a reason, and resolve reports; all actions audited. The threshold counts distinct reporters among OPEN unresolved reports. Operators must resolve enough flags to at most10 distinct unresolved reporters before reinstating; resolution removes that flag from the active count while audit history remains. Repeat unresolved flags from one account count once.
+8. Each visitor/owner can choose light, dark or system theme across the entire site/app. Persist per browser/device, including before login, with no server-side preference or token persistence in web. System mode follows OS changes. Dialogs, cards, form controls, status bar and CAPTCHA surface respect theme; text and controls remain readable.
 
-### Adopted assumptions
+## Safety, privacy and nonfunctional requirements
 
-A1. MVP is an English-language, invite-only pilot for owners aged 18 or older; deployment does not mean an unattended public launch. Local development permits registration without an invitation. Public deployment requires an invitation secret. Email ownership verification and password recovery require a transactional email provider before open registration; the pilot does not claim email verification.
+Every object is authorized server-side, including messages and admin photo operations. Captcha uses self-hosted signed expiring proof-of-work challenges, one-use redemption persisted across replicas, bounded work and input; invalid, missing, replayed or expired solutions fail closed. This raises automation cost, not a guarantee that attackers are humans; auth/write rate limits remain. No third-party CAPTCHA account required. Secret signing key is configuration/Secret Manager, never in client code. Local H2 can generate an ephemeral key; PostgreSQL startup rejects missing key.
 
-A2. Multiple accepted connections are permitted. Acceptance expresses interest only, with no exclusivity or contractual commitment. There is no chat in MVP. Each participant independently shares their own chosen email and/or phone with an accepted connection. Neither acceptance nor future payment implies consent.
+Passwords remain BCrypt12 with 12–72 UTF-8 bytes; opaque bearer sessions are hashed, bounded and expiring, web memory/native secure storage only. HTTPS ingress, parameterized SQL, canonical URL checks and no-store private responses remain. Auth rate20/IP/15min and writes120/owner/min remain, challenge issuance rate-limited. Single-process rate-limit limitations and open-signup Sybil risk are documented; unverified accounts can collude to reach 11 flags, so operators need appeals/reinstatement and monitoring. Do not claim CAPTCHA verifies email, phone or identity.
 
-A3. Dogs must be intact, at least 24 months old, available, and covered by owner attestations concerning ownership, current vaccination and pre-breeding veterinary consultation within the past 12 months to participate. This is a configurable interim platform policy, not medical advice or a universal legal threshold. All health information is labelled self-declared. No verified-health badge exists.
+Account export includes previously shared participant conversation messages, including closed or blocked history and own read state plus existing account/dog data, never other owner's contacts without consent or moderation evidence. Account deletion cascades messages, reads and related reports, with minimal deidentified audit retained. Closed/restricted chat is inaccessible and retained until either participant deletes the account; no automated time-based purge in this release. Message reports retain scoped evidence until account/report cascade deletion. Operator access must be restricted and audited. No credential/message bodies/contact details in operational logs.
 
-A4. Location is entered as city and approximate coordinates or obtained with explicit device permission. Coordinates are quantized to 0.01 degrees before storage. Other owners see city and distance bands, never coordinates, exact distance or address. No background location collection or map pins.
+Health claims stay self-declared; existing age24mo/intact/vaccination/ownership/vet12mo eligibility is unchanged pending veterinary review. No background location, exact address, payment data, raw health documents or human DOB. Domain/jurisdiction, lawful operator notices, welfare escalation, staffing, appeals, recovery, retention and backup deletion policy remain owner decisions; these are no longer implemented as signup gates. Phase 2 includes email/mobile verification and password recovery/provider decisions.
 
-A5. Profile changes require moderation before discovery. Admins approve or suspend dogs and review reports; role assignment uses operator-selected owner IDs in server configuration, never an unverified email allowlist. The app is not a puppy marketplace. No stud-fee collection, breeding contracts, shipping, litter sales or mating scheduling.
+## Constraints, out of scope and reliability
 
-A6. PostgreSQL is production storage; H2 is local development/test storage. Photos are size-limited JPEG/PNG, decoded and re-encoded to strip metadata, stored privately in the database initially. This is a bounded pilot simplification; move media to private object storage at scale.
+Use Java17 Spring Boot, PostgreSQL17 with additive Flyway migrations and H2 tests. Preserve existing owner IDs, password hashes, private media, connections and suspensions during upgrade. No schema reset. Shared Expo web/Android/iOS supports new features; Android APK is rebuilt; iOS signing/testing remains deferred at user's prior instruction. No payments, marketplace, puppies/contracts, maps, scientific breeding recommendations, chat files, voice/video, push, account verification or app-store submission.
 
-A7. Use Expo and React Native Web with a shared TypeScript app. Spring serves the exported web build and API from one Cloud Run service. Use us-central1 provisionally to minimize pilot infrastructure complexity; this does not select the launch jurisdiction or promise data residency.
+Targets (not measured promises): foreground peer message visible within10s on healthy network; warm API p95<500ms at20 concurrent owners; readable keyboard/screen-reader controls; restart-safe messages and duplicate protection. Foreground polling introduces additional Cloud Run/SQL requests and message storage; existing GCP service/SQL are reused with no new paid messaging service. Production remains GCP mypetpair/248924650823/us-central1.
 
-### Product owner decisions before real-user public launch
+## Success metrics and acceptance
 
-D1. Launch jurisdictions, operator identity, lawful breeding/licensing terms and privacy notice. D2. Veterinarian-reviewed eligibility, breed-specific tests and reproductive-history policy. D3. Named moderation/support staff, welfare escalation and appeals contact. D4. Retention and deletion obligations, subprocessors and hosting geography. D5. Transactional email provider, domain and email verification/recovery policy. D6. App-store publisher identities and signing credentials. D7. Whether any health evidence will be manually reviewed. These do not prevent a gated pilot; they block describing the service as ready for open public use.
+Measure account completion, profiles published, request acceptance, conversations started, failed/retried sends and abuse reports without logging message text. All critical authorization/transition tests must pass; no known contact/location leak. Native build, web export, lint and TypeScript pass. Distinguish executed checks from targets, simulated proof solving from actual browser CAPTCHA and device tests.
 
-## Goals and scope
+AC01 Open signup without invite succeeds with valid mobile+fresh CAPTCHA; missing/invalid phone, absent/expired/replayed CAPTCHA fails. Login also rejects missing/replayed CAPTCHA even with correct credentials; bad credentials remain generic. Verification disclosure visible on both forms/account.
+AC02 Valid new/edited profiles publish automatically when eligible/photo-present; suspended profiles stay hidden after edits/photos. No approval flow remains. Existing pending migrates without unsuspending existing suspended profiles.
+AC03 Ten distinct reporters leave dog visible; eleven suspend. Repeating one reporter cannot trigger or inflate count. Self-report fails. Operator photo removal, suspension, reinstatement and resolution require role and reason and produce audit; owner/third-party cannot use admin endpoints.
+AC04 JPEG/PNG/WebP decode succeeds with metadata stripped; spoofed MIME/name, corrupt image, oversized bytes/pixels and unsupported formats fail safely.
+AC05 Pending, closed, blocked, suspended, unrelated and anonymous users cannot read/send chat. Only accepted active pair can; plaintext and timestamps round-trip safely. Retrying client ID returns original; pagination has stable order; unread/read markers never disclose another conversation. Malformed/oversized/empty messages fail. Reported message scoped operator access only.
+AC06 Account deletion/export honors private conversation boundaries, contact consent and cascades.
+AC07 Light/dark/system persist on web/native, respect OS, style auth/discovery/settings/chat/moderation/CAPTCHA with readable controls, and contain no theme-dependent hardcoded light surfaces.
+AC08 Existing contact consent, location privacy, blocks, interest transitions and free entitlements still pass. Shared client exports web/Android/iOS; updated test APK is published, and deployed web/API behavior matches verified specs.
 
-Deliver an understandable nearby-discovery experience, reliable male-to-female requests, female-owner control, and explicit contact consent. Make dangerous object-level authorization and location leaks testable. Provide a deployable pilot with documentation and reproducible builds.
+## Decisions and assumptions
 
-Primary user types: an adult owner with male dogs, an adult owner with female dogs, an owner with both, and a separately authorized moderator. Visitors can view the product introduction and enter login/registration, but cannot enumerate real profiles or contacts.
-
-Out of scope: payments, paid contact bypass, recommendations asserting breeding compatibility, veterinary diagnosis, genetic inference, chat, push/email notifications, automatic geocoding, maps, heat-cycle tracking, puppy sales, marketplace transactions, social login and production app-store submission. Native signed releases remain dependent on publisher credentials.
-
-## Journeys
-
-1. An owner registers with email, password, display name, adult/terms attestations and pilot invitation if required; signs in and signs out. Invalid credentials receive a generic error. The owner can update name/phone, export account data and delete their account.
-2. An owner adds a dog, provides health/ownership attestations and photo, then submits for review. The profile is private until approved. They can edit, pause, resume or archive their dogs. Any edit of public profile content returns it to review.
-3. The owner selects one of their dogs, chooses a radius and filters, and sees cards ordered nearest first. They inspect health information and self-declared status before deciding. Owners can browse both sexes; sending interest requires their selected dog to be male and the target female.
-4. The male owner sends one pending request per dog pair. The female owner reviews profile and request, then accepts or declines. The male owner may withdraw a pending request. Requests expire after 30 days. An accepted request becomes a connection; either owner can close it.
-5. Within a connection, each owner chooses whether to share their own contact channels. The other sees only the granted channels. Revoking consent or closing/blocking removes future API access immediately; already copied details cannot be retracted. The UI explains this before sharing.
-6. Either owner reports a profile or blocks its owner. Blocking immediately hides all dogs in both directions and disables interactions/contact access. Moderators see a report queue, resolve reports and approve/suspend dogs with audit events.
-
-## Dog data and field rationale
-
-| Field | Visibility | Purpose |
-|---|---|---|
-| Name, breed or mix, sex, date of birth | Profile (age derived from DOB) | Identity and role/age eligibility |
-| One to six photos | Authenticated approved discovery | Identify the dog; strip EXIF and validate image data |
-| City, quantized coordinates | City public to members; coordinates private | Nearby search without home addresses |
-| Weight in kg, temperament, biography | Profile | Practical size/handling context; no inferred suitability |
-| Intact status and availability | Profile | Prevent inappropriate requests; allow pauses |
-| Health screening summary and last vet consultation date | Profile, self-declared | Inform due diligence without certifying fitness |
-| Vaccination and lawful-ownership attestations | Eligibility and profile summary | Accountability and welfare baseline |
-| Optional registry/pedigree reference | Profile | Owner investigation; not a health guarantee |
-| Breeding history / relatedness | Not collected in initial pilot | Requires veterinary and privacy policy; discuss privately after consent |
-| Owner email, optional phone | Owner only, then per-channel grant | Consent-based follow-up |
-| Moderation state and reason | Owner/admin | Publication and appeal transparency |
-
-Do not put phone numbers, emails, addresses or sensitive records in biography/health text. UI guidance, report reasons and manual review enforce this operationally; initial automated heuristics may not catch all personal data. No raw health documents are uploaded.
-
-## Functional requirements
-
-FR01 Account: canonical case-insensitive unique email; BCrypt passwords of 12–72 UTF-8 bytes; random opaque expiring bearer sessions stored only as hashes on server; logout revokes session. Web holds bearer only in memory; native secure storage may be used. No tokens in URLs/logs. Registration requires explicit adult and policy acknowledgement and configurable invitation gate. UI supports login, signup, logout and profile management.
-
-FR02 Dogs: enforce owner authorization on create/read private/edit/archive/photo operations. Max 20 dogs/account and 6 photos/dog. Require name, sex, breed, DOB, city and valid bounded coordinates; validate text lengths and positive weight. Ineligible dogs may be saved but not published/requested. Archived dogs are hidden immediately.
-
-FR03 Photos: uploads max 5 MB/file; accept decoded JPEG/PNG up to 16 megapixels; resize longest edge to at most 1600px, strip metadata, persist MIME safely. Photo download checks owner or approved visible profile access; blocked/unapproved photos are inaccessible. Owner can remove photos. No arbitrary remote URL ingestion.
-
-FR04 Discovery: authenticated, radius 1–500 km, default 50; latitude/longitude from selected owned dog. Only approved, available, eligible dogs from unblocked other owners. Filter sex, case-insensitive breed, min/max age. Nearest ascending default; age ascending and newest optional; stable ID tie-break, page/size bounds (max 50). Responses omit contacts and all coordinates. Show distance bands (under 5, 5–10, 10–25, 25–50, 50–100, 100+ km). Never return exact distance as a hidden property. Query parameters must not enable arbitrary repeated center probing.
-
-FR05 Interest: only eligible owned male to visible eligible female; no self-interest, reversed sex, duplicates or blocked pair. Pair has at most one pending/accepted request; declined/withdrawn/expired may be re-requested subject to rate limit. States: PENDING → ACCEPTED, DECLINED, WITHDRAWN, EXPIRED; ACCEPTED → CLOSED. Repeated acceptance is idempotent. Only recipient owner accepts/declines, sender withdraws, either closes accepted. Mutation validates state atomically and rechecks ownership, moderation and blocks.
-
-FR06 Contacts: grant operation requires an active accepted connection and authorizes only the caller's own email/phone. Phone can be shared only when present. Changing or removing the phone number revokes previous phone grants. Contact-read returns caller contact plus counterparty's explicitly granted channels. Revocation, block, account deletion, suspension or closing defeats stale requests immediately. Authorization and consent are never monetization concerns.
-
-FR07 Safety: block owner across all dogs, requests and contacts; report dog with reason (welfare, fraud, harassment, privacy, other) and optional bounded details. No report details exposed to reported owner. Admin role checked on all moderation endpoints; approve/suspend/resolve records timestamp and actor. Do not expose pending/rejected content to discovery.
-
-FR08 Privacy: export authenticated account, dogs and connections; account deletion cascades profile, sessions, photos, interests, grants, blocks and reports involving deleted dogs; it removes contacts, with minimal de-identified moderation audit only. UI confirms deletion purposefully. Log no credentials, contact payloads or location. Document residual backup retention. Photos and private APIs use no-store caching.
-
-FR09 Free foundation: server entitlement response includes plan FREE, unlimited profile views and contact sharing subject to consent. Policy service owns future allowance decisions. No checkout, payment SDK, card data, credits purchasing or hidden paid restrictions.
-
-FR10 Responsive shared client: discovery, profile detail, dog editor/photo picker, request inbox/outbox, connections/contact controls, owner settings and admin queue. Accessible labels, readable text/contrast, keyboard-capable web controls, loading/error/empty states and responsive wide/narrow layouts. Familiar profile-card navigation with original MyPetPair branding; no Bumble assets or logo.
-
-## Nonfunctional requirements
-
-NFR01 Use TLS through managed ingress; parameterized database access; strict same-origin web policy and allowlisted CORS for development; server-side roles and DTOs. No client-derived owner IDs or entitlement decisions trusted. Rate limit auth (20 attempts per source IP per 15 minutes) and authenticated writes (120 per owner per minute) with bounded state and Retry-After responses; document single-process pilot limitations.
-
-NFR02 Target p95 API latency below 500ms at 20 concurrent pilot users after warmup with 1,000 profiles. This is a target until measured. Limit candidate scanning and document the pilot ceiling; migrate to PostGIS indexed queries for scale.
-
-NFR03 Atomic request transitions and unique active-pair constraints; durable PostgreSQL, schema migrations, backups, health checks and sanitized structured logs. Target 99.5% monthly availability for pilot, not an SLA; Cloud SQL shared-core lacks SLA.
-
-NFR04 Config via environment, secrets in Secret Manager, no committed credentials. Pin dependency versions and lockfiles. Build/test in CI. Native bundling must work for Android and iOS; signing and physical device testing must be honestly reported separately.
-
-NFR05 Owner can use approximate city location without granting GPS. Never collect background position, exact address, human DOB, government identity or payment data. All health/registration claims remain self-declared.
-
-## Metrics
-
-Measure aggregate signup completion, submitted/approved dog profiles, discovery-to-request conversion, accepted/request ratio, time to owner response, grants/revocations, reports per 100 connections and moderation response time. Initial goals: 80% completion in moderated usability tests; 100% negative authorization cases passing; zero known contact/location leaks; 90% reports triaged within 48 hours once staffed. Do not log profile-view identities for analytics by default. Analytics dashboards are later scope; operational counts and test evidence suffice for pilot.
-
-## Acceptance criteria
-
-AC01 A new adult invited owner registers, signs in/out and manages two dogs; a different owner cannot edit either. Invalid invitation/adult acknowledgement prevents signup.
-AC02 Saving a dog without required values fails with field-readable errors; an ineligible dog cannot be approved or sent a request. Editing an approved profile returns it to pending.
-AC03 Uploading a valid image succeeds and strips source metadata; oversized/non-image inputs fail. Unauthorized photo reads fail.
-AC04 Two nearby approved dogs sort by quantized proximity with stable ties; filters and pagination work; own/blocked/paused/unapproved dogs never appear; output has no coordinates/contact/exact distance.
-AC05 A male owner's request appears in the female owner's inbox; only she can accept. Duplicate, own-dog, reversed-sex and stale transitions fail safely. Repeated accept returns accepted state.
-AC06 Acceptance alone exposes no counterparty contacts. Grant email reveals only that channel, revocation removes it, and unrelated callers cannot read contacts. Block/close/suspend defeats existing grants.
-AC07 Report appears only in admin queue; a non-admin cannot moderate; an admin approves/suspends and resolves with an audit event.
-AC08 Owner export excludes other owners' private data; deletion removes account/session/photos and prevents subsequent login/contact access.
-AC09 FREE entitlements are unlimited and never override consent. No payment integration exists.
-AC10 TypeScript validation, web export, Android/iOS bundles and backend tests pass. Manual browser smoke test covers login, discovery and a request decision. Report any unperformed native-device, load, recovery or infrastructure tests.
-AC11 A secret-scanned commit is published to the requested GitHub destination; GCP deployment has health/API checks, documented region/services/cost drivers and a verifiable application URL, or a concrete external blocker with runnable deployment assets.
-
-## Sources supporting architecture and safety review
-
-[Expo universal web support](https://docs.expo.dev/workflow/web/), [Flutter web trade-offs](https://docs.flutter.dev/platform-integration/web/faq), [OWASP object authorization](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/), [RSPCA inherited dog conditions](https://www.rspca.org.uk/adviceandwelfare/pets/genetics/dogs), [ASPCA responsible breeding](https://www.aspca.org/about-us/aspca-policy-and-position-statements/position-statement-criteria-responsible-breeding). These do not establish legal compliance for an undecided jurisdiction.
-
-## Review resolutions before implementation
-
-Only operator-selected owner IDs can receive admin privileges; registration cannot self-elevate through an unverified email. Password limits are 12–72 UTF-8 bytes to respect BCrypt. Vet attestation must be within 12 months. Contacts require both dogs to remain approved, eligible, available, unarchived and in original sex roles on every read. Edited/pending or unavailable counterparty dogs are redacted from request history; the opaque owner ID remains to support blocking. Owners can always close/withdraw/revoke/block. Deletion cascades interests/grants/photos/reports/blocks and de-identifies audit actors. Session lifetime is seven days.
+"Pilot role" is interpreted as operator/moderator, not a new role. "More than10 users" means11 distinct non-owner accounts with unresolved flags per dog, not raw report submissions or dog profiles. Mobile format validation is not verification; 8–15 digits, optional leading plus and common separators accepted; country code recommended. Unverified legacy owners keep account access. Theme is device-local. Chat is per dog-pair connection; moderation applies reactively and manual suspension remains available. CAPTCHA is ALTCHA proof-of-work with honest anti-bot limitation, not a custom checkbox or visual challenge. Source of changes: direct product-owner instruction; no additional approval represented.

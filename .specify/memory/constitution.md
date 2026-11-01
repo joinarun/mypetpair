@@ -12,7 +12,7 @@ The service MUST quantize coordinates before persistence and MUST NOT return coo
 
 ### III. Responsible introductions
 
-The product MUST label health claims self-declared and MUST NOT certify breeding suitability. The pilot MUST be gated until jurisdiction, veterinary policy and staffed moderation are defined.
+The product MUST label health claims self-declared and MUST NOT certify breeding suitability. Registration MUST be open under the product owner’s 1 November 2026 decision. Authentication MUST enforce CAPTCHA. Profiles publish without prior review; distinct-user flags trigger suspension at more than ten reporters. Email/mobile verification is explicitly deferred to phase 2. The operator can suspend profiles and remove photos; staffing, jurisdiction and retention decisions MUST remain documented without an invitation gate.
 
 ### IV. Spec-driven verification
 
@@ -34,4 +34,6 @@ PRD → Spec Kit specification → design/contracts/tasks → gap review → imp
 
 Amendments update the PRD/specs and rationale before behavior changes. Review constitution compliance at design and release. Major versions change principles; minor versions add policy; patches clarify. Initial adoption 1.0.0 establishes five principles; no prior principles or sections removed. No template changes needed.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-31 | **Last Amended**: 2026-10-31
+**Version**: 1.1.0 | **Ratified**: 2026-10-31 | **Last Amended**: 2026-11-01
+
+Amendment 1.1.0: product owner explicitly replaces invitation/pre-publication review with open signup, CAPTCHA and reactive moderation; adds private accepted-connection chat and theme selection. Existing architecture and consent principles remain.

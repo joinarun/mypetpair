@@ -1,0 +1,7 @@
+# Research decisions
+
+- Reuse Spring JDBC/global DB mutation lock and Flyway additive V2/V3; correctness across Cloud Run replicas for matching, reports and chat. No WebSocket/Redis service: foreground polling keeps infrastructure unchanged and permits permission rechecks every request. More requests/cost/battery than push; pause in background.
+- Self-hosted ALTCHA signed expiring proof-of-work, persistent replay redemption separate transaction before password check. Official Java SDK and web widget; hosted same-origin widget in native WebView. No external CAPTCHA account; production secret failclosed. Computational challenge raises bot cost but cannot prove identity or fully prevent Sybils. Preserve auth/rate controls. [Official Java SDK](https://github.com/altcha-org/altcha-lib-java), [widget](https://github.com/altcha-org/altcha).
+- WebP via maintained ImageIO plugin; actual decoder allowlist and metadata-free JPEG conversion, no filename/MIME trust. Preserve existing size/pixel limits.
+- Reactive moderation threshold11 distinct account IDs per dog. Deduplicate reporter/dog pairs and preserve existing suspensions. Unverified users can collude: documented limitation; manual suspend/reinstate and appeals remain necessary.
+- Per-device React theme context drives colors/styles; web localStorage, native secure storage preference (not authentication); OS system follows useColorScheme. [Expo58](https://docs.expo.dev/versions/v58.0.0/).

@@ -1,3 +1,5 @@
+> Current v2 update: open registration and server-verified self-hosted ALTCHA replace invitation gating; reactive moderation replaces prior approval; accepted-connection text chat uses PostgreSQL and foreground REST polling; Light/Dark/System themes and WebP apply to the shared client. Existing GCP services/cost drivers below remain; no paid messaging/CAPTCHA service added. See [PRD2](PRD.md) and [feature002 plan](../specs/002-open-registration-chat/plan.md).
+
 # MyPetPair architecture decisions
 
 ## Frontend choice before implementation

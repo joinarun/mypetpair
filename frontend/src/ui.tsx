@@ -1,4 +1,4 @@
-import React, { ReactNode, useEffect, useState } from "react";
+import React, { ReactNode, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -14,34 +14,24 @@ import {
 import Feather from "@expo/vector-icons/Feather";
 import { photoData, token, API_ORIGIN } from "./api";
 
-export const C = {
-  cream: "#F7F5EE",
-  paper: "#FFFFFF",
-  green: "#164D3D",
-  dark: "#173F34",
-  ink: "#253E36",
-  muted: "#748078",
-  border: "#E1E5DC",
-  sage: "#E8EFE4",
-  coral: "#E5866C",
-  peach: "#FBE9DE",
-  error: "#A53D3D",
-};
+import { Palette, useTheme } from "./theme";
+
 export type IconName = keyof typeof Feather.glyphMap;
 export function Icon({
   name,
   size = 20,
-  color = C.green,
+  color,
 }: {
   name: IconName;
   size?: number;
   color?: string;
 }) {
+  const { C } = useUI();
   return (
     <Feather
       name={name}
       size={size}
-      color={color}
+      color={color ?? C.green}
       accessible={false}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
@@ -50,6 +40,7 @@ export function Icon({
   );
 }
 export function Brand({ small }: { small?: boolean }) {
+  const { C, s } = useUI();
   return (
     <View style={s.brand}>
       <View style={[s.brandMark, small && { width: 34, height: 34 }]}>
@@ -81,8 +72,9 @@ export function Button({
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
 }) {
+  const { C, s } = useUI();
   const color =
-    variant === "primary" ? "white" : variant === "danger" ? C.error : C.green;
+    variant === "primary" ? C.onAccent : variant === "danger" ? C.error : C.green;
   return (
     <Pressable
       accessibilityRole="button"
@@ -102,8 +94,8 @@ export function Button({
         },
         variant === "soft" && { backgroundColor: C.sage, borderColor: C.sage },
         variant === "danger" && {
-          backgroundColor: "#FFF0ED",
-          borderColor: "#F1C7BD",
+          backgroundColor: C.dangerSurface,
+          borderColor: C.dangerBorder,
         },
         variant === "ghost" && {
           borderColor: "transparent",
@@ -150,6 +142,7 @@ export function Field({
   maxLength?: number;
   hint?: string;
 }) {
+  const { C, s } = useUI();
   return (
     <View style={{ gap: 7, flexGrow: 1, minWidth: 130 }}>
       <Text style={s.label}>{label}</Text>
@@ -158,7 +151,7 @@ export function Field({
         value={value}
         onChangeText={onChange}
         placeholder={placeholder}
-        placeholderTextColor="#98A29A"
+        placeholderTextColor={C.muted}
         secureTextEntry={secure}
         autoCapitalize={
           keyboardType === "email-address" || secure ? "none" : "sentences"
@@ -187,6 +180,7 @@ export function Check({
   onChange: (v: boolean) => void;
   hint?: string;
 }) {
+  const { C, s } = useUI();
   return (
     <Pressable
       accessibilityRole="checkbox"
@@ -207,7 +201,7 @@ export function Check({
           checked && { backgroundColor: C.green, borderColor: C.green },
         ]}
       >
-        {checked ? <Icon name="check" size={14} color="white" /> : null}
+        {checked ? <Icon name="check" size={14} color={C.onAccent} /> : null}
       </View>
       <View style={{ flex: 1, gap: 3 }}>
         <Text style={s.body}>{label}</Text>
@@ -227,6 +221,7 @@ export function Chip({
   onPress?: () => void;
   icon?: IconName;
 }) {
+  const { C, s } = useUI();
   return (
     <Pressable
       accessibilityRole={onPress ? "button" : undefined}
@@ -241,9 +236,9 @@ export function Chip({
       ]}
     >
       {icon ? (
-        <Icon name={icon} size={13} color={active ? "white" : C.green} />
+        <Icon name={icon} size={13} color={active ? C.onAccent : C.green} />
       ) : null}
-      <Text style={[s.chipText, active && { color: "white" }]}>{children}</Text>
+      <Text style={[s.chipText, active && { color: C.onAccent }]}>{children}</Text>
     </Pressable>
   );
 }
@@ -256,12 +251,13 @@ export function Tag({
   tone?: "green" | "peach" | "neutral";
   icon?: IconName;
 }) {
+  const { C, s } = useUI();
   return (
     <View
       style={[
         s.tag,
         tone === "peach" && { backgroundColor: C.peach },
-        tone === "neutral" && { backgroundColor: "#F0F1ED" },
+        tone === "neutral" && { backgroundColor: C.sage },
       ]}
     >
       {icon ? <Icon name={icon} size={12} /> : null}
@@ -280,6 +276,7 @@ export function Empty({
   text: string;
   action?: ReactNode;
 }) {
+  const { s } = useUI();
   return (
     <View style={s.empty}>
       <View style={s.emptyIcon}>
@@ -300,6 +297,7 @@ export function Panel({
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { s } = useUI();
   return <View style={[s.panel, style]}>{children}</View>;
 }
 export function SectionTitle({
@@ -313,6 +311,7 @@ export function SectionTitle({
   subtitle?: string;
   action?: ReactNode;
 }) {
+  const { s } = useUI();
   return (
     <View
       style={[
@@ -346,6 +345,7 @@ export function Photo({
   name?: string;
   source?: any;
 }) {
+  const { C, s } = useUI();
   const [loaded, setLoaded] = useState<{
     id?: string;
     uri?: string;
@@ -406,7 +406,7 @@ export function Photo({
     </View>
   );
 }
-export const s = StyleSheet.create({
+const makeStyles = (C: Palette) => StyleSheet.create({
   brand: { flexDirection: "row", alignItems: "center", gap: 9 },
   brandMark: {
     width: 42,
@@ -432,7 +432,7 @@ export const s = StyleSheet.create({
     borderColor: C.border,
     borderRadius: 11,
     paddingHorizontal: 13,
-    backgroundColor: "white",
+    backgroundColor: C.paper,
     color: C.ink,
     fontSize: 14,
   },
@@ -447,7 +447,7 @@ export const s = StyleSheet.create({
     gap: 9,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "white",
+    backgroundColor: C.paper,
   },
   buttonText: { fontSize: 13, fontWeight: "700" },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
@@ -497,7 +497,7 @@ export const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "white",
+    backgroundColor: C.paper,
   },
   chipText: { color: C.green, fontSize: 12, fontWeight: "600" },
   tag: {
@@ -515,7 +515,7 @@ export const s = StyleSheet.create({
     width: 20,
     height: 20,
     borderWidth: 1,
-    borderColor: "#B9C5BA",
+    borderColor: C.border,
     borderRadius: 5,
     marginTop: 1,
     justifyContent: "center",
@@ -538,3 +538,9 @@ export const s = StyleSheet.create({
     marginBottom: 4,
   },
 });
+
+export function useUI() {
+  const { colors: C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
+  return { C, s };
+}

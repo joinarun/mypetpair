@@ -1,0 +1,5 @@
+# Data model
+
+Existing owners.phone remains private string, now required for registration/update; legacy empty remains for migration compatibility, verification false DTOflags. Dogs retain APPROVED/SUSPENDED internal labels; V2 migrates PENDING to APPROVED and changes default. Eligibility/access checks remain separate.
+
+Messages: ordered generated long id, interest FK cascade, sender owner FK cascade, clientMessageId UUID, body varchar2000, createdAt timestampstring. Unique(interest,sender,clientMessageId). Reads: PK(interest,owner) with last ordered message ID; only allow owned thread cursors, monotonic updates. Message reports extend existing dog report record with message reference/snapshot scoped to actual message. Dog flag count is distinct reporter IDs among OPEN unresolved reports, excluding own; duplicates do not inflate. Resolved reports remain historical evidence but do not contribute to the active flag count; deletion follows existing FK cascades. Captcha replay table signature hashPK and expiry epoch; consume independently before credentials with uniqueness guarantee and bounded cleanup. Theme preference only client-local light/dark/system.

@@ -1,112 +1,54 @@
 # MyPetPair
 
-[Open the live pilot](https://mypetpair-248924650823.us-central1.run.app) · Invitation required · [Deployment and operator access](docs/RELEASE.md)
+Nearby dog discovery, female-owner-controlled connections and private in-app chat, built with Java Spring Boot and one Expo React Native/Web client for web, Android and iOS. Free service; no payments.
 
-MyPetPair is an invite-only dog breeding introduction pilot. Owners manage multiple dogs, discover nearby profiles, send male-to-female interest requests and independently control contact sharing after acceptance. Health claims are self-declared; a connection does not certify breeding suitability.
+[Live app](https://mypetpair-248924650823.us-central1.run.app) · [PRD](docs/PRD.md) · [Current specs/API](specs/002-open-registration-chat/) · [Operations](docs/OPERATIONS.md) · [Mobile testing](docs/MOBILE_TESTING.md)
 
-The backend uses Java 17 and Spring Boot. One Expo React Native and React Native Web application targets web, Android and iOS. The [architecture decision](docs/ARCHITECTURE.md) compares the frontend options and records the selected approach, GCP services and cost drivers. No payments are implemented.
+## Current scope
 
-![MyPetPair live pilot](docs/images/deployed.jpg)
+- Open signup with required mobile, email, password and adult/terms acknowledgement; CAPTCHA on both signup and login. **Email and mobile verification are not required; planned for phase2.**
+- Profiles publish automatically when eligible, available and photo-present. No invitation or prior approval. Eleven distinct unresolved reporters suspend a profile; operators can suspend/reinstate, resolve reports and remove photos with audit reasons.
+- JPEG, PNG and WebP uploads, decoded and re-encoded without metadata, private media access and coarse location.
+- Male-to-female interest; female owner accepts. Accepted active connections unlock text chat, history, unread counts and safe retries. Contact sharing remains a separate explicit choice.
+- Light, Dark and System themes across web/mobile, saved per device. No chat attachments, push notifications or end-to-end encryption.
 
-## Product and specifications
+All health claims are self-declared. Eligibility is an interim platform rule, not a veterinary certification. See [privacy/safety](docs/PRIVACY_SAFETY.md). Historical invitation-gated requirements are archived in docs/history and spec001; spec002 supersedes conflicts.
 
-The [PRD](docs/PRD.md) separates confirmed requirements, delegated defaults and public-launch decisions. The [Spec Kit feature](specs/001-owner-matching/spec.md), [implementation plan](specs/001-owner-matching/plan.md), [tasks](specs/001-owner-matching/tasks.md) and [independent review](docs/SPEC_REVIEW.md) define implementation and acceptance criteria.
+## Local setup
 
-To resume the existing Spec Kit feature after cloning, set its directory before running the installed skills or scripts:
+Java17+ and Maven, Node24/npm. For native Android builds use Java21 and Android SDK. Global Maven mirrors are bypassed with project settings. Spring does not automatically read dotenv files; set variables in the server process. H2 is default local storage; PostgreSQL is production.
 
-```sh
-export SPECIFY_FEATURE_DIRECTORY=specs/001-owner-matching
-.specify/scripts/bash/check-prerequisites.sh --json --require-spec --require-tasks --include-tasks
-```
-
-- [REST API contract](specs/001-owner-matching/contracts/api.md)
-- [Database model and lifecycle](specs/001-owner-matching/data-model.md)
-- [Operations and environment configuration](docs/OPERATIONS.md)
-- [Privacy safety and launch decisions](docs/PRIVACY_SAFETY.md)
-- [Verification evidence](docs/VERIFICATION.md)
-- [Repository and deployment status](docs/RELEASE.md)
-
-## Local backend
-
-Install Java 17, Maven, Node.js 22.14 or newer and npm. Docker is optional for local PostgreSQL; H2 requires no database installation.
-
-```sh
-cd backend
-mvn -s maven-settings.xml test
-mvn -s maven-settings.xml spring-boot:run
-```
-
-The API listens on `http://localhost:8080`; `GET /api/health` returns its status. The default development database is file-backed H2 at `backend/data/mypetpair` when started from `backend`. Flyway applies schema migrations at startup. Use PostgreSQL for deployed environments.
-
-The project Maven settings file resolves dependencies from public Maven Central and keeps builds independent of machine-specific private mirrors. It contains no credentials.
-
-For fictional sample data, stop the backend and restart it from the `backend` directory as follows. Seed mode must never be enabled on a deployment containing real users.
-
-```sh
-cd backend
-APP_SEED=true mvn -s maven-settings.xml spring-boot:run
-```
-
-The seeded accounts are `male@example.invalid`, `female@example.invalid` and `moderator@example.invalid`. Their deliberately public, local-only password is `Fictional-local-only-42!`. These are test fixtures, not deployable credentials. The seeded moderator is enabled only in local seed mode. PostgreSQL startup rejects seed mode.
-
-Use the male owner to discover a female dog and send interest, then switch to the female owner and accept it. Check that acceptance alone reveals no counterparty email or phone. Grant one channel, switch owner to inspect it, then revoke it and verify that subsequent reads hide it. Use the moderator account to review pending dogs and reports. A third ordinary account must remain unable to edit others' profiles or read their private contacts.
-
-## Web and native clients
-
-For Android APK downloads, installation and local rebuilds, see [mobile testing](docs/MOBILE_TESTING.md). iOS test distribution is deferred for this release at the product owner's request.
-
-In a second terminal, install the locked client dependencies and start web development:
-
-```sh
+```bash
 cd frontend
 npm ci
-EXPO_PUBLIC_API_URL=http://localhost:8080 npm run web
-```
-
-The development web client uses the configured backend origin. The deployed web export is served by Spring from the same origin; omit `EXPO_PUBLIC_API_URL` when creating that export.
-
-For a native development client, set `EXPO_PUBLIC_API_URL` to the backend's reachable HTTPS origin and run `npm start`. A physical phone cannot use the development computer's `localhost`; a local-only device test needs the computer's reachable LAN address and appropriate network permissions. `npm run android` and `npm run ios` open supported development targets when their tools are installed.
-
-```sh
-cd frontend
-npm run typecheck
 npm run lint
-npm run export:all
+npm run typecheck
+npm run export:web
+cd ../backend
+mvn -s maven-settings.xml verify
 ```
 
-The all-platform export creates web assets plus Android/iOS JavaScript bundles. Use `npm run export:web` for the Spring-served web artifact. The deployment build includes that artifact with the backend; see the root Dockerfile and [operations](docs/OPERATIONS.md).
+`scripts/build-local.sh` packages the web export into the Spring Boot JAR. Start it with explicit local seed configuration, for example:
 
-Production signing and cloud builds use the profiles in `frontend/eas.json`. Configure a user-owned Expo/EAS project and publisher credentials for store distribution. Internal Android test APKs can also be built locally using [the mobile build script](scripts/build-mobile-tests.sh). Do not commit signing material. No store release is implied by a successful JavaScript export or test APK build.
+```bash
+APP_SEED=true DB_URL='jdbc:h2:file:./.local/mypetpair;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE' \
+  java -Djava.awt.headless=true -jar backend/target/mypetpair-api-1.0.0.jar
+```
 
-## Environment configuration
+Use http://localhost:8080. Fictional H2-only accounts: male@example.invalid, female@example.invalid and moderator@example.invalid, with local-only password `Fictional-local-only-42!`. Login still requires the real local CAPTCHA. These accounts are never seeded into PostgreSQL. Fresh databases need no invitation. Existing owners can sign in without a legacy mobile number and are prompted to complete it.
 
-Set backend environment variables in the server process. Do not commit local configuration, passwords, invitation codes, session tokens or native signing credentials. Public client environment variables are embedded in the app and must contain no secrets.
+For separate Expo development, set EXPO_PUBLIC_API_URL to the reachable backend HTTPS origin or local API address; CAPTCHA framing is restricted to configured CORS origins. A phone cannot use the computer's localhost. `npm start`, `npm run android` or `npm run ios` in frontend starts the corresponding development workflow. `npm run export:all` exports web and Android/iOS JavaScript bundles; bundles are not installable apps. EAS profiles are optional and require a user-owned Expo account/signing setup.
 
-The root `.env.example` is a local configuration reference; Spring does not automatically load a copied `.env` file. Its JDBC URL overrides the default H2 path to `./.local/mypetpair`, relative to the backend process's working directory. Quote JDBC URLs containing semicolons when entering them in a shell.
+## Configuration and API
 
-| Variable | Local default | Purpose |
-|---|---|---|
-| `PORT` | `8080` | Backend HTTP port |
-| `DB_URL` | File-backed H2 | JDBC URL; production requires PostgreSQL |
-| `DB_USERNAME` | `sa` | Database user |
-| `DB_PASSWORD` | Empty for local H2 | Production password from Secret Manager |
-| `APP_INVITATION_REQUIRED` | `false` locally | Require invitation during registration; enable in production |
-| `APP_INVITATION_CODE` | None | Server-only invitation secret when registration is gated |
-| `APP_ADMIN_OWNER_IDS` | None | Comma-separated independently verified owner UUIDs |
-| `APP_SEED` | `false` | Fictional local H2 seed data only |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:8081,http://localhost:19006` | Development web origin allowlist |
-| `AUTH_RATE_LIMIT` | `20` | Authentication attempts per source IP per 15-minute window |
-| `WRITE_RATE_LIMIT` | `120` | Authenticated writes per owner per minute |
-| `EXPO_PUBLIC_API_URL` | Same origin on web | Public API origin embedded in the client; set a reachable HTTPS origin for native |
+`.env.example` and `frontend/.env.example` document local settings. Production requires DB_URL/DB_USERNAME/DB_PASSWORD, APP_CAPTCHA_HMAC_SECRET (32+UTF8bytes), APP_ADMIN_OWNER_IDS, APP_SEED=false and the intended CORS_ALLOWED_ORIGINS list. Public EXPO_PUBLIC_API_URL contains only an API origin, never secrets. H2 may generate an ephemeral CAPTCHA key; PostgreSQL refuses missing key or test-only CAPTCHA workload. No production authentication bypass exists.
 
-Administrator privileges cannot be acquired by registering an allowlisted email. An operator verifies control of an existing account, obtains its owner ID and configures that immutable ID on the server. See [operations](docs/OPERATIONS.md).
+REST endpoints use `/api`. Account/auth/dog/discovery/request/contact/block/report/operator endpoints remain from spec001; [spec002 contracts](specs/002-open-registration-chat/contracts/api.md) define CAPTCHA, chat, open signup and moderator photo removal changes. Bearer token required for private APIs; tokens are hashed on server, memory-only on web and secure storage on native. CAPTCHA proofs are expiring, single-use and purpose-bound. Rate limits remain. Mobile/email are unverified private contact fields, not identity proof.
 
-A PostgreSQL backend requires the invitation gate and a nonempty invitation secret and rejects `APP_SEED=true`. No separate Spring `prod` profile is required.
+Database schema: [V1](backend/src/main/resources/db/migration/V1__initial_schema.sql), additive V2/V3 migrations in the same directory, and [current data model](specs/002-open-registration-chat/data-model.md). Do not edit applied migrations or reset production data. Photos remain privately stored in the database for now. Message deletion follows account/connection FK cascades; report snapshots are scoped operator evidence.
 
-For optional local PostgreSQL, set a private `LOCAL_DB_PASSWORD` in your shell, then run `docker compose up -d postgres` from the repository root. The container binds only to `127.0.0.1:5432` and persists data in the `postgres-data` volume. Start the backend with `DB_URL=jdbc:postgresql://localhost:5432/mypetpair`, `DB_USERNAME=mypetpair`, `DB_PASSWORD` equal to that local password, `APP_SEED=false`, `APP_INVITATION_REQUIRED=true` and a private nonempty `APP_INVITATION_CODE`. The SQL container is local development infrastructure; it is not the GCP deployment.
+## Checks and deployment
 
-## Release boundaries
+`scripts/verify.sh` runs backend tests, client checks/exports and a secret-pattern scan. `scripts/smoke-v2.py http://localhost:8080` exercises real HTTP with synthetic data and cleans up. Cloud mode requires `--cloud-secrets`, verifies the destination before reading the operator secret, solves real CAPTCHA, and prints no credentials/tokens/message bodies. `scripts/smoke-pilot.py` is historical v1 tooling and is incompatible with mandatory CAPTCHA.
 
-An exported Android or iOS JavaScript bundle is not a signed installable app or an app-store release. Native device testing, signing, publisher accounts and store review are separate steps. Consult the verification report for checks actually executed.
-
-Open public registration requires a launch jurisdiction, operator privacy and terms notices, veterinary policy, staffed moderation/support and email verification/recovery. The invite-only pilot does not verify email ownership. Consent can stop future contact access; it cannot retract details already copied. These limitations are covered in the [privacy and safety guide](docs/PRIVACY_SAFETY.md).
+Deploy only to GCP mypetpair/248924650823, us-central1. Review [architecture/cost drivers](docs/ARCHITECTURE.md), operations and the latest verification/release report before deployment. Reuse Cloud Run/Cloud SQL/Artifact Registry/Cloud Build/Secret Manager. No new paid CAPTCHA/chat service. Secrets and signing material stay outside GitHub. Android APKs use internal test signing; physical-device journeys and iOS signing/store publication are separate steps. GitHub repository remains private.

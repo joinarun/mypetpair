@@ -1,3 +1,5 @@
+> Historical v1 baseline. Open registration/reactive moderation/chat/themes supersede conflicting requirements in [feature002](../002-open-registration-chat/spec.md), adopted1November2026.
+
 # Feature Specification: Owner controlled dog matching
 
 **Feature Branch**: `main` (spec directory independent of branch)

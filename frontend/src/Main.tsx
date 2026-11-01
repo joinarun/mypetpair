@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -16,8 +16,11 @@ import { router, usePathname } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { api, setToken } from "./api";
+import { api, ApiError, setToken } from "./api";
 import { useSession } from "./session";
+import { Palette, ThemeChoice, useTheme } from "./theme";
+import Captcha from "./Captcha";
+import Chat, { useForeground } from "./Chat";
 import {
   Audit,
   Contacts,
@@ -30,7 +33,6 @@ import {
 import {
   Brand,
   Button,
-  C,
   Check,
   Chip,
   Empty,
@@ -41,7 +43,7 @@ import {
   Photo,
   SectionTitle,
   Tag,
-  s,
+  useUI,
 } from "./ui";
 
 type Page = "discover" | "requests" | "dogs" | "account" | "admin";
@@ -93,6 +95,8 @@ function Sheet({
   onClose: () => void;
   wide?: boolean;
 }) {
+  const { C, s } = useUI();
+  const st = useMemo(() => makeStyles(C), [C]);
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   return (
@@ -151,6 +155,8 @@ function DogCard({
   own?: boolean;
   onEdit?: () => void;
 }) {
+  const { C, s } = useUI();
+  const st = useMemo(() => makeStyles(C), [C]);
   return (
     <View style={st.card}>
       <Pressable
@@ -181,7 +187,7 @@ function DogCard({
           <Text
             style={{
               fontSize: 20,
-              color: dog.sex === "FEMALE" ? "#A86F77" : "#7E95A3",
+              color: C.muted,
             }}
           >
             {dog.sex === "FEMALE" ? "♀" : "♂"}
@@ -194,7 +200,7 @@ function DogCard({
           <Tag icon="activity">Health self-declared</Tag>
           {own ? (
             <Tag tone={dog.moderation === "APPROVED" ? "green" : "peach"}>
-              {pretty(dog.moderation)}
+              {dog.moderation === "APPROVED" ? "Active" : pretty(dog.moderation)}
             </Tag>
           ) : (
             <Tag tone="neutral">
@@ -234,6 +240,9 @@ function DogCard({
 }
 
 export default function Main() {
+  const { C, s } = useUI();
+  const { choice, resolved, setChoice } = useTheme();
+  const st = useMemo(() => makeStyles(C), [C]);
   const { width } = useWindowDimensions();
   const wide = width >= 1050;
   const medium = width >= 700;
@@ -262,7 +271,9 @@ export default function Main() {
     text: string;
     error?: boolean;
   } | null>(null);
-  const [invitationRequired, setInvitationRequired] = useState(true);
+  const [themeOpen, setThemeOpen] = useState(false);
+  const [captchaPayload, setCaptchaPayload] = useState("");
+  const [captchaVersion, setCaptchaVersion] = useState(0);
   const [dogs, setDogs] = useState<Dog[]>([]);
   const [interests, setInterests] = useState<Interest[]>([]);
   const [blocked, setBlocked] = useState<
@@ -288,11 +299,11 @@ export default function Main() {
     maxAge: "180",
     sort: "nearest",
   });
-  const [auth, setAuth] = useState<"login" | "register" | null>(null);
+  const [auth, setAuth] = useState<"login" | "register" | null>(screen === "login" || screen === "register" ? screen : null);
   const [authEmail, setAuthEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authName, setAuthName] = useState("");
-  const [invitation, setInvitation] = useState("");
+  const [authPhone, setAuthPhone] = useState("");
   const [adult, setAdult] = useState(false);
   const [terms, setTerms] = useState(false);
   const [policy, setPolicy] = useState(false);
@@ -307,6 +318,8 @@ export default function Main() {
     ImagePicker.ImagePickerAsset[]
   >([]);
   const [requestTab, setRequestTab] = useState("incoming");
+  const [chatInterest, setChatInterest] = useState<Interest | null>(null);
+  const foreground = useForeground();
   const [contactInterest, setContactInterest] = useState<Interest | null>(null);
   const [contacts, setContacts] = useState<Contacts | null>(null);
   const [shareEmail, setShareEmail] = useState(false);
@@ -328,9 +341,10 @@ export default function Main() {
   const [adminDogs, setAdminDogs] = useState<Dog[]>([]);
   const [adminReports, setAdminReports] = useState<Report[]>([]);
   const [audit, setAudit] = useState<Audit[]>([]);
-  const [adminStatus, setAdminStatus] = useState("PENDING");
+  const [adminStatus, setAdminStatus] = useState("APPROVED");
   const [moderate, setModerate] = useState<Dog | null>(null);
   const [moderationReason, setModerationReason] = useState("");
+  const [adminPhotoRemoval, setAdminPhotoRemoval] = useState<string | null>(null);
   const [resolution, setResolution] = useState<Report | null>(null);
   const [resolutionText, setResolutionText] = useState("");
   const activeDog = dogs.find((d) => d.id === activeId);
@@ -372,15 +386,11 @@ export default function Main() {
           : d.find((v) => !v.archived)?.id || "",
       );
       setInterests(i);
+      setChatInterest(previous => previous && i.some(next => next.id === previous.id && next.chatAvailable) ? previous : null);
       setBlocked(b);
     },
     [user, setActiveId],
   );
-  useEffect(() => {
-    api<{ invitationRequired: boolean }>("/config")
-      .then((v) => setInvitationRequired(v.invitationRequired))
-      .catch(() => {});
-  }, []);
   useEffect(() => {
     let current = true;
     if (user) {
@@ -400,6 +410,7 @@ export default function Main() {
         if (current) {
           setDogs([]);
           setInterests([]);
+          setChatInterest(null);
           setResults([]);
         }
       });
@@ -459,6 +470,25 @@ export default function Main() {
     }; // Filter text is committed by Apply filters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, activeId, page, searchVersion, appliedFilters]);
+  useEffect(() => {
+    if (!user || page !== "requests" || !foreground) return;
+    let disposed = false;
+    let fetching = false;
+    const poll = async () => {
+      if (fetching) return;
+      fetching = true;
+      try {
+        const items = await api<Interest[]>("/interests");
+        if (disposed) return;
+        setInterests(items);
+        setChatInterest(previous => previous && items.some(item => item.id === previous.id && item.chatAvailable) ? previous : null);
+      } catch (e) {
+        if (!disposed && e instanceof ApiError && [401, 403, 404, 409].includes(e.status)) setChatInterest(null);
+      } finally { fetching = false; }
+    };
+    const timer = setInterval(() => { void poll(); }, 5000);
+    return () => { disposed = true; clearInterval(timer); };
+  }, [user, page, foreground]);
   const refreshAdmin = useCallback(async () => {
     const [d, r, a] = await Promise.all([
       api<Dog[]>(`/admin/dogs?status=${adminStatus}`),
@@ -521,8 +551,10 @@ export default function Main() {
     perform(async () => {
       if (auth === "register" && (!adult || !terms))
         throw new Error(
-          "Please confirm that you are 18 or older and agree to the pilot terms.",
+          "Please confirm that you are 18 or older and agree to the terms.",
         );
+      if (!captchaPayload) throw new Error("Complete the security check first.");
+      try {
       const result = await api<{ token: string; user: User }>(
         `/auth/${auth}`,
         "POST",
@@ -533,9 +565,10 @@ export default function Main() {
               displayName: authName.trim(),
               adultConfirmed: adult,
               termsAccepted: terms,
-              invitationCode: invitation,
+              phone: authPhone.trim(),
+              captchaPayload,
             }
-          : { email: authEmail.trim(), password },
+          : { email: authEmail.trim(), password, captchaPayload },
       );
       setDogs([]);
       setResults([]);
@@ -544,9 +577,10 @@ export default function Main() {
       await setToken(result.token);
       setUser(result.user);
       setPassword("");
-      setInvitation("");
+
       setAuth(null);
       go("discover");
+      } finally { setCaptchaPayload(""); setCaptchaVersion(v => v + 1); }
     });
   const sendInterest = (d: Dog) => {
     if (!activeDog || activeDog.sex !== "MALE") {
@@ -562,7 +596,7 @@ export default function Main() {
       !activeDog.available
     ) {
       setNotice({
-        text: "Your selected dog must be approved, available and eligible before sending interest.",
+        text: "Your selected dog must be active, available and eligible before sending interest.",
         error: true,
       });
       return;
@@ -584,11 +618,12 @@ export default function Main() {
   const decide = (i: Interest, action: string) =>
     perform(
       async () => {
-        await api(`/interests/${i.id}/decision`, "POST", { action });
+        const updated = await api<Interest>(`/interests/${i.id}/decision`, "POST", { action });
         await refresh();
+        if (action === "ACCEPT") { setRequestTab("connections"); if (updated.chatAvailable) setChatInterest(updated); }
       },
       action === "ACCEPT"
-        ? "Connection accepted. Contact sharing is still your choice."
+        ? "Connection accepted. Chat is now available; contact sharing is still your choice."
         : "Request updated.",
     );
   const openContacts = (i: Interest) =>
@@ -686,7 +721,7 @@ export default function Main() {
       await refresh();
       setEditor(null);
       setSearchVersion((v) => v + 1);
-    }, "Profile saved for moderation. You can add or change photos at any time.");
+    }, "Profile saved. Eligible profiles with photos appear in discovery unless suspended.");
   const useLocation = () =>
     perform(async () => {
       const permission = await Location.requestForegroundPermissionsAsync();
@@ -726,7 +761,7 @@ export default function Main() {
       accessibilityRole="alert"
       style={[
         st.notice,
-        notice.error && { backgroundColor: "#FFF0ED", borderColor: "#F0C9C0" },
+        notice.error && { backgroundColor: C.dangerSurface, borderColor: C.border },
       ]}
     >
       <Icon
@@ -785,14 +820,15 @@ export default function Main() {
         { paddingTop: Platform.OS !== "web" ? insets.top : 0 },
       ]}
     >
-      <StatusBar style="dark" />
+      <StatusBar style={resolved === "dark" ? "light" : "dark"} />
       {!user ? (
         <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
           <View
             style={[st.landingHeader, { paddingHorizontal: medium ? 60 : 22 }]}
           >
             <Brand />
-            <View style={s.row}>
+            <View style={[s.row, { flexWrap: "wrap" }]}>
+              <Button icon="sun" variant="ghost" onPress={() => setThemeOpen(true)}>Theme</Button>
               {medium ? (
                 <Text style={[s.hint, { marginRight: 12 }]}>
                   Good connections start with care.
@@ -813,7 +849,7 @@ export default function Main() {
                   setAuth("register");
                 }}
               >
-                Join the pilot
+                Create account
               </Button>
             </View>
           </View>
@@ -987,12 +1023,12 @@ export default function Main() {
             style={[st.landingFooter, { paddingHorizontal: medium ? 60 : 24 }]}
           >
             <Text style={[s.hint, { maxWidth: 620 }]}>
-              An invitation-only pilot for owners aged 18+. Profiles and health
+              A free service for owners aged 18+. Profiles and health
               information are self-declared. A connection is an introduction,
               never a recommendation to breed.
             </Text>
             <Button variant="ghost" onPress={() => setPolicy(true)}>
-              Pilot terms & privacy
+              Terms & privacy
             </Button>
           </View>
         </ScrollView>
@@ -1004,7 +1040,7 @@ export default function Main() {
               <Text
                 style={[
                   s.eyebrow,
-                  { marginTop: 45, marginBottom: 15, color: "#94A399" },
+                  { marginTop: 45, marginBottom: 15, color: C.muted },
                 ]}
               >
                 Your little circle
@@ -1020,7 +1056,7 @@ export default function Main() {
                 >
                   <Icon
                     name={n.icon}
-                    color={page === n.key ? C.green : "#7E8A82"}
+                    color={page === n.key ? C.green : C.muted}
                   />
                   <Text
                     style={{
@@ -1071,7 +1107,7 @@ export default function Main() {
                   <Text numberOfLines={1} style={s.label}>
                     {user.displayName}
                   </Text>
-                  <Text style={s.hint}>Free pilot member</Text>
+                  <Text style={s.hint}>Free member</Text>
                 </View>
                 <Pressable
                   accessibilityLabel="Log out"
@@ -1101,7 +1137,7 @@ export default function Main() {
                 </View>
               )}
               <View style={s.row}>
-                <Tag tone="peach">Invitation-only pilot</Tag>
+                <Button icon="sun" variant="ghost" onPress={() => setThemeOpen(true)}>Theme</Button>
                 {medium ? (
                   <View style={st.avatar}>
                     <Text style={{ color: C.green, fontWeight: "700" }}>
@@ -1122,6 +1158,7 @@ export default function Main() {
                 style={{ width: "100%", maxWidth: 1260, alignSelf: "center" }}
               >
                 {noticeView}
+                {!user.phone?.trim() ? <Panel><Text style={s.h3}>Complete your owner details</Text><Text style={s.body}>Please add your required mobile number in Account. Email and mobile verification are planned for phase 2.</Text><Button onPress={() => go("account")}>Open account details</Button></Panel> : null}
                 {page === "discover" ? (
                   <>
                     <SectionTitle
@@ -1173,7 +1210,7 @@ export default function Main() {
                         <Text style={s.body}>
                           Within {appliedFilters.radius} km
                         </Text>
-                        <Text style={{ color: "#CED5CC" }}>│</Text>
+                        <Text style={{ color: C.border }}>│</Text>
                         <Text style={s.label}>
                           {appliedFilters.sort === "nearest"
                             ? "Nearest first"
@@ -1288,7 +1325,7 @@ export default function Main() {
                         <Empty
                           icon="plus-circle"
                           title="First, introduce your dog"
-                          text="A dog profile gives your discovery a nearby starting point. Add their details and photos, then submit for review."
+                          text="A dog profile gives your discovery a nearby starting point. Add their details, health attestations and photos to publish."
                           action={
                             <Button icon="plus" onPress={() => openEditor()}>
                               Add a dog
@@ -1366,7 +1403,7 @@ export default function Main() {
                       <Panel>
                         <Empty
                           title="A little quiet around here"
-                          text="Try a wider radius or fewer filters. New profiles appear after moderation, so every introduction starts thoughtfully."
+                          text="Try a wider radius or fewer filters. Eligible profiles with photos appear automatically. Try again as more owners join."
                           action={
                             <Button
                               variant="outline"
@@ -1409,9 +1446,9 @@ export default function Main() {
                     <View style={st.careBanner}>
                       <Icon name="eye" size={22} />
                       <Text style={[s.body, { flex: 1 }]}>
-                        Profiles appear in discovery after moderation. Changes
-                        return a profile to review. Pause availability whenever
-                        you need a break.
+                        Eligible profiles with photos appear automatically.
+                        Profiles with more than 10 distinct open user flags are
+                        suspended. Pause availability whenever you need a break.
                       </Text>
                     </View>
                     {dogs.length ? (
@@ -1472,7 +1509,7 @@ export default function Main() {
                           `Incoming${incoming.length ? ` (${incoming.length})` : ""}`,
                         ],
                         ["sent", "Sent"],
-                        ["connections", "Connections"],
+                        ["connections", `Connections (${interests.filter(item => item.state === "ACCEPTED").length})`],
                         ["history", "History"],
                       ].map(([v, label]) => (
                         <Chip
@@ -1585,6 +1622,8 @@ export default function Main() {
                                     </Button>
                                   ) : i.state === "ACCEPTED" ? (
                                     <>
+                                      <Button icon="message-circle" disabled={!i.chatAvailable} onPress={() => setChatInterest(i)}>{i.unreadCount ? `Chat (${i.unreadCount} unread)` : "Chat"}</Button>
+                                      {!i.chatAvailable ? <Text style={s.hint}>Chat is unavailable while a profile is suspended, unavailable or ineligible.</Text> : null}
                                       <Button
                                         icon="lock"
                                         busy={busy}
@@ -1597,7 +1636,7 @@ export default function Main() {
                                         onPress={() =>
                                           setConfirm({
                                             title: "Close this connection?",
-                                            text: "Both owners will lose access to shared contacts. Previously copied details cannot be recalled.",
+                                            text: "Both owners will lose access to chat and shared contacts. Previously copied details cannot be recalled.",
                                             label: "Close connection",
                                             action: async () => {
                                               await api(
@@ -1706,17 +1745,16 @@ export default function Main() {
                           <Text style={s.label}>Email address</Text>
                           <Text style={s.body}>{user.email}</Text>
                           <Text style={s.hint}>
-                            Email ownership is not verified in this closed
-                            pilot.
+                            Email and mobile verification are not required. Verification will be added in phase 2.
                           </Text>
                         </View>
                         <Field
-                          label="Phone (optional)"
+                          label="Mobile number (required)"
                           value={phone}
                           onChange={setPhone}
                           keyboardType="phone-pad"
                           maxLength={30}
-                          hint="Adding a phone never shares it automatically."
+                          hint="A mobile number is required. It is not verified until phase 2 and is never shared automatically."
                         />
                         <Button
                           busy={busy}
@@ -1748,7 +1786,7 @@ export default function Main() {
                             </Text>
                           </View>
                           <Text style={s.body}>
-                            The pilot is free. Profile views are unlimited, and
+                            MyPetPair is free. Profile views are unlimited, and
                             sharing contact details always depends on your
                             permission.
                           </Text>
@@ -1840,7 +1878,7 @@ export default function Main() {
                       ]}
                     >
                       <Button variant="ghost" onPress={() => setPolicy(true)}>
-                        Pilot terms & privacy
+                        Terms & privacy
                       </Button>
                       <Button
                         variant="outline"
@@ -1858,7 +1896,7 @@ export default function Main() {
                     <SectionTitle
                       eyebrow="Moderation workspace"
                       title="Care is a team effort."
-                      subtitle="Review eligibility and public content. Health information remains self-declared after approval."
+                      subtitle="Review eligibility and public content. Profiles publish automatically. More than 10 distinct user flags trigger suspension."
                       action={
                         <Button
                           variant="outline"
@@ -1866,20 +1904,20 @@ export default function Main() {
                           busy={busy}
                           onPress={() => perform(refreshAdmin)}
                         >
-                          Refresh queue
+                          Refresh profiles
                         </Button>
                       }
                     />
                     <View
                       style={[s.row, { flexWrap: "wrap", marginBottom: 20 }]}
                     >
-                      {["PENDING", "APPROVED", "SUSPENDED"].map((v) => (
+                      {["APPROVED", "SUSPENDED"].map((v) => (
                         <Chip
                           key={v}
                           active={adminStatus === v}
                           onPress={() => setAdminStatus(v)}
                         >
-                          {pretty(v)} dogs
+                          {v === "APPROVED" ? "Active" : "Suspended"} dogs
                         </Chip>
                       ))}
                     </View>
@@ -1901,6 +1939,7 @@ export default function Main() {
                                 <Text style={s.h3}>
                                   {d.name} · {d.breed}
                                 </Text>
+                                <Text style={s.hint}>{d.flagCount || 0} distinct open user flags</Text>
                                 <Text style={s.hint}>
                                   {age(d.ageMonths)} · {d.city} ·{" "}
                                   {d.eligible
@@ -1912,6 +1951,7 @@ export default function Main() {
                                 variant="outline"
                                 onPress={() => {
                                   setModerate(d);
+                                  setAdminPhotoRemoval(null);
                                   setModerationReason(d.moderationReason || "");
                                 }}
                               >
@@ -1922,7 +1962,7 @@ export default function Main() {
                         ))
                       ) : (
                         <Panel>
-                          <Text style={s.body}>No dogs in this queue.</Text>
+                          <Text style={s.body}>No profiles in this category.</Text>
                         </Panel>
                       )}
                     </View>
@@ -1949,8 +1989,9 @@ export default function Main() {
                             <Text style={s.body}>
                               {r.details || "No additional details."}
                             </Text>
+                            {r.messageText ? <View style={st.subtleBox}><Text selectable style={s.body}>Reported message: {r.messageText}</Text></View> : null}
                             <Text style={s.hint}>
-                              Dog: {r.dogId} · Report: {r.id}
+                              {r.messageId ? `Message: ${r.messageId}` : `Dog: ${r.dogId}`} · Report: {r.id}
                             </Text>
                             {r.resolution ? (
                               <Text style={s.body}>{r.resolution}</Text>
@@ -2002,7 +2043,7 @@ export default function Main() {
                   <Text style={s.hint}>
                     Thoughtful introductions. Happier possibilities.
                   </Text>
-                  <Text style={s.hint}>MyPetPair · Free pilot</Text>
+                  <Text style={s.hint}>MyPetPair · Free</Text>
                 </View>
               </View>
             </ScrollView>
@@ -2025,7 +2066,7 @@ export default function Main() {
                   >
                     <Icon
                       name={n.icon}
-                      color={page === n.key ? C.green : "#8D988F"}
+                      color={page === n.key ? C.green : C.muted}
                       size={21}
                     />
                     <Text
@@ -2044,6 +2085,8 @@ export default function Main() {
           </View>
         </View>
       )}
+      {chatInterest && user ? <Chat key={chatInterest.id} interest={chatInterest} ownerId={user.id} onClose={() => setChatInterest(null)} onUnavailable={message => { setChatInterest(null); setNotice({ text: message, error: true }); void refresh().catch(() => {}); }} onRead={() => setInterests(items => items.map(item => item.id === chatInterest.id ? { ...item, unreadCount: 0 } : item))} /> : null}
+      {themeOpen ? <Sheet title="Make yourself at home" subtitle="Choose a theme for the whole app." onClose={() => setThemeOpen(false)}><View style={[s.row, { flexWrap: "wrap" }]}>{(["light", "dark", "system"] as ThemeChoice[]).map(value => <Chip key={value} active={choice === value} onPress={() => setChoice(value)}>{pretty(value)}</Chip>)}</View><Text style={s.body}>System follows your device appearance. Your preference is saved on this device.</Text></Sheet> : null}
       {auth && !policy ? (
         <Sheet
           title={
@@ -2054,18 +2097,18 @@ export default function Main() {
           subtitle={
             auth === "login"
               ? "Log in to your little circle."
-              : "Join the free, invitation-only MyPetPair pilot."
+              : "Create your free MyPetPair account."
           }
-          onClose={() => setAuth(null)}
+          onClose={() => { setAuth(null); setCaptchaPayload(""); }}
         >
           {noticeView}
           <View style={[s.row, { marginBottom: 3 }]}>
-            <Chip active={auth === "login"} onPress={() => setAuth("login")}>
+            <Chip active={auth === "login"} onPress={() => { setAuth("login"); setCaptchaPayload(""); }}>
               Log in
             </Chip>
             <Chip
               active={auth === "register"}
-              onPress={() => setAuth("register")}
+              onPress={() => { setAuth("register"); setCaptchaPayload(""); }}
             >
               Create account
             </Chip>
@@ -2103,15 +2146,7 @@ export default function Main() {
           />
           {auth === "register" ? (
             <>
-              {invitationRequired ? (
-                <Field
-                  label="Pilot invitation code"
-                  value={invitation}
-                  onChange={setInvitation}
-                  secure
-                  placeholder="Provided by the pilot operator"
-                />
-              ) : null}
+              <Field label="Mobile number (required)" value={authPhone} onChange={setAuthPhone} keyboardType="phone-pad" maxLength={30} placeholder="+91 98765 43210" hint="Include your country code. Your mobile number stays private." />
               <Check
                 checked={adult}
                 onChange={setAdult}
@@ -2120,20 +2155,22 @@ export default function Main() {
               <Check
                 checked={terms}
                 onChange={setTerms}
-                label="I agree to the pilot terms and privacy notice."
+                label="I agree to the terms and privacy notice."
               />
               <Button variant="ghost" onPress={() => setPolicy(true)}>
-                Read pilot terms & privacy
+                Read terms & privacy
               </Button>
             </>
           ) : null}
+          <Captcha key={`${auth}-${captchaVersion}`} purpose={auth} onVerified={setCaptchaPayload} />
           <Button
             busy={busy}
             icon="arrow-right"
             disabled={
+              !captchaPayload ||
               !authEmail ||
               !password ||
-              (auth === "register" && (!authName || !adult || !terms))
+              (auth === "register" && (!authName || !authPhone.trim() || !adult || !terms))
             }
             onPress={authenticate}
           >
@@ -2142,20 +2179,18 @@ export default function Main() {
           <View style={st.subtleBox}>
             <Icon name="lock" size={16} />
             <Text style={[s.hint, { flex: 1 }]}>
-              Your contact details stay private. Email ownership and password
-              recovery are not available in this closed pilot; keep your
-              password safe.
+              Email and mobile verification are not required and will be added in phase 2. Keep your password safe; password recovery is not available yet.
             </Text>
           </View>
         </Sheet>
       ) : null}
       {policy ? (
         <Sheet
-          title="A thoughtful pilot, by design."
+          title="Thoughtful connections, by design."
           subtitle="Participation terms and privacy notice"
           onClose={() => setPolicy(false)}
         >
-          <Tag tone="peach">Closed pilot · not an open public service</Tag>
+          <Tag tone="peach">Open registration · adults 18+</Tag>
           <Text style={s.h3}>Responsible introductions</Text>
           <Text style={s.body}>
             MyPetPair is a free introduction service for adult dog owners. A
@@ -2179,27 +2214,28 @@ export default function Main() {
             optional, requested only when you choose it, and rounded before
             storage. Other owners see a city and distance band. Your email and
             phone are private unless you explicitly share a channel with an
-            accepted connection. Revocation stops future access but cannot
+            accepted connection. Chat is available only to connected owners;
+            message reports share the reported text with an operator. Revocation stops future access but cannot
             remove details another owner already copied.
           </Text>
           <Text style={s.h3}>Your account data</Text>
           <Text style={s.body}>
-            Your account, dog profiles, processed photos, requests, consent,
+            Your account, dog profiles, processed photos, requests, chat messages, consent,
             blocks and reports are stored to provide the service. Photos are
             re-encoded to remove metadata. You can export and delete your
             account in Account. Deletion removes active personal records;
             backups may retain earlier data until expiry. Minimal moderation
             records are de-identified. No payments or advertising tracking are
-            part of the pilot.
+            part of this service.
           </Text>
-          <Text style={s.h3}>Pilot limitations</Text>
+          <Text style={s.h3}>Account verification</Text>
           <Text style={s.body}>
-            Email verification, password recovery, production operator contact
-            details, jurisdiction-specific terms and formal retention
-            commitments must be configured before open public launch. Join only
-            through an operator invitation and do not treat this pilot as an
-            emergency or veterinary service. Report concerns and block owners
-            within profiles.
+            Email and mobile verification are not required to register or log in.
+            Both are planned for phase 2; an account is not proof of identity.
+            Mobile number is required but is private unless you share it. Profiles
+            publish without pre-approval; 11 distinct unresolved user flags trigger suspension.
+            Operators can suspend unsafe profiles and remove photos. Report concerns
+            and block owners. This is not an emergency or veterinary service.
           </Text>
           <Button onPress={() => setPolicy(false)}>I understand</Button>
         </Sheet>
@@ -2233,7 +2269,7 @@ export default function Main() {
                     width: 10,
                     height: 10,
                     borderRadius: 5,
-                    backgroundColor: idx === photoIndex ? C.green : "#CCD4CA",
+                    backgroundColor: idx === photoIndex ? C.green : C.muted,
                   }}
                 />
               ))}
@@ -2259,11 +2295,11 @@ export default function Main() {
               <Icon name="eye" size={18} />
               <View style={{ flex: 1, gap: 4 }}>
                 <Text style={s.label}>
-                  Moderation: {pretty(detail.moderation)}
+                  Profile status: {detail.moderation === "APPROVED" ? "Active" : pretty(detail.moderation)}
                 </Text>
                 <Text style={s.hint}>
                   {detail.moderationReason ||
-                    "Profiles and changes are reviewed before appearing in discovery."}
+                    "Your profile appears in discovery when eligible, available and not suspended."}
                 </Text>
               </View>
             </View>
@@ -2447,7 +2483,7 @@ export default function Main() {
             multiline
             maxLength={1000}
             placeholder="Tell other owners what makes your dog, your dog."
-            hint="Public to signed-in owners after approval. No contacts or exact addresses."
+            hint="Public to signed-in owners when eligible and available. No contacts or exact addresses."
           />
           <Text style={s.eyebrow}>Their neighborhood</Text>
           <Field
@@ -2533,7 +2569,7 @@ export default function Main() {
           />
           <Text style={s.eyebrow}>Photos · up to six</Text>
           <Text style={s.hint}>
-            JPEG or PNG, up to 5 MB and 16 megapixels each. Use photos you have
+            JPEG, PNG or WebP, up to 5 MB and 16 megapixels each. Use photos you have
             permission to share. Metadata is removed on upload.
           </Text>
           <View style={[s.row, { flexWrap: "wrap", alignItems: "flex-start" }]}>
@@ -2561,7 +2597,7 @@ export default function Main() {
                                 photoIds: v.dog.photoIds.filter(
                                   (p) => p !== id,
                                 ),
-                                moderation: "PENDING",
+                                moderation: v.dog.moderation,
                               },
                             }
                           : v,
@@ -2604,8 +2640,8 @@ export default function Main() {
           </Button>
           <Button busy={busy} icon="check" onPress={saveDog}>
             {editor.dog
-              ? "Save changes for review"
-              : "Save dog profile for review"}
+              ? "Save changes"
+              : "Save dog profile"}
           </Button>
           {editor.dog ? (
             <Button
@@ -2614,7 +2650,7 @@ export default function Main() {
               onPress={() =>
                 setConfirm({
                   title: `Archive ${editor.dog!.name}'s profile?`,
-                  text: "The profile will disappear from discovery and contacts will no longer be accessible through its connections. This profile cannot be restored in the pilot.",
+                  text: "The profile will disappear from discovery and contacts will no longer be accessible through its connections. This profile cannot be restored.",
                   label: "Archive profile",
                   action: async () => {
                     await api(`/dogs/${editor.dog!.id}`, "DELETE");
@@ -2910,7 +2946,7 @@ export default function Main() {
           <Tag tone={moderate.eligible ? "green" : "peach"}>
             {moderate.eligible
               ? "Eligibility passed"
-              : "Not eligible for approval"}
+              : "Not eligible for matching"}
           </Tag>
           <Field
             label="Moderation reason (visible to owner)"
@@ -2920,10 +2956,14 @@ export default function Main() {
             multiline
             hint="Do not reveal private report information."
           />
-          <View style={s.row}>
+          <Text style={s.h3}>Uploaded photos</Text>
+          <Text style={s.hint}>Removing a photo is permanent. Enter the reason above before selecting a photo to remove.</Text>
+          <View style={[s.row, { flexWrap: "wrap" }]}>{moderate.photoIds.map((id, index) => <View key={id} style={{ gap: 8 }}><Photo id={id} name={moderate.name} style={{ width: 120, height: 120, borderRadius: 12 }} /><Button variant="danger" disabled={!moderationReason.trim() || busy} onPress={() => setAdminPhotoRemoval(id)}>{`Remove photo ${index + 1}`}</Button></View>)}</View>
+          {adminPhotoRemoval ? <View style={st.subtleBox}><Text style={s.body}>Permanently remove this photo?</Text><Button variant="danger" busy={busy} onPress={() => perform(async () => { await api(`/admin/dogs/${moderate.id}/photos/${adminPhotoRemoval}`, "DELETE", { reason: moderationReason }); setModerate(previous => previous ? { ...previous, photoIds: previous.photoIds.filter(id => id !== adminPhotoRemoval) } : null); setAdminPhotoRemoval(null); await refreshAdmin(); }, "Photo removed.")}>Confirm photo removal</Button><Button variant="ghost" onPress={() => setAdminPhotoRemoval(null)}>Cancel removal</Button></View> : null}
+          <View style={[s.row, { flexWrap: "wrap" }]}>
             <Button
               style={{ flex: 1 }}
-              disabled={!moderate.eligible || !moderate.photoIds.length}
+              disabled={moderate.moderation !== "SUSPENDED" || !moderationReason.trim()}
               busy={busy}
               onPress={() =>
                 perform(async () => {
@@ -2933,15 +2973,16 @@ export default function Main() {
                   });
                   setModerate(null);
                   await refreshAdmin();
-                }, "Profile approved for discovery.")
+                }, "Profile reinstated.")
               }
             >
-              Approve profile
+              Reinstate profile
             </Button>
             <Button
               style={{ flex: 1 }}
               variant="danger"
               busy={busy}
+              disabled={!moderationReason.trim()}
               onPress={() =>
                 perform(async () => {
                   await api(`/admin/dogs/${moderate.id}/moderation`, "POST", {
@@ -2950,7 +2991,7 @@ export default function Main() {
                   });
                   setModerate(null);
                   await refreshAdmin();
-                }, "Profile suspended and contact access stopped.")
+                }, "Profile suspended. Contact and chat access stopped.")
               }
             >
               Suspend profile
@@ -2998,15 +3039,17 @@ export default function Main() {
   );
 }
 
-const st = StyleSheet.create({
+const makeStyles = (C: Palette) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.cream },
   landingHeader: {
-    height: 105,
+    minHeight: 105,
+    paddingVertical: 16,
+    flexWrap: "wrap",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderBottomWidth: 1,
-    borderBottomColor: "#E7E9E1",
+    borderBottomColor: C.border,
     gap: 10,
   },
   hero: {
@@ -3035,16 +3078,16 @@ const st = StyleSheet.create({
   },
   heroCircle: {
     borderRadius: 250,
-    backgroundColor: "#E8ECDF",
+    backgroundColor: C.sage,
     position: "absolute",
     top: 45,
   },
   sampleCard: {
-    backgroundColor: "white",
+    backgroundColor: C.paper,
     borderRadius: 20,
     overflow: "hidden",
     borderWidth: 7,
-    borderColor: "white",
+    borderColor: C.paper,
     boxShadow: "0px 15px 45px rgba(31,58,40,0.12)",
   },
   smallHeart: {
@@ -3057,7 +3100,7 @@ const st = StyleSheet.create({
   },
   floatingNote: {
     position: "absolute",
-    backgroundColor: "white",
+    backgroundColor: C.paper,
     borderRadius: 15,
     flexDirection: "row",
     alignItems: "center",
@@ -3076,7 +3119,7 @@ const st = StyleSheet.create({
   },
   miniDog: {
     position: "absolute",
-    backgroundColor: "white",
+    backgroundColor: C.paper,
     borderRadius: 17,
     padding: 12,
     flexDirection: "row",
@@ -3086,14 +3129,14 @@ const st = StyleSheet.create({
     transform: [{ rotate: "-4deg" }],
   },
   valueStrip: {
-    backgroundColor: "#EFEEE5",
+    backgroundColor: C.sage,
     paddingVertical: 36,
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 35,
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: "#E3E6DC",
+    borderColor: C.border,
   },
   landingFooter: {
     paddingVertical: 28,
@@ -3105,7 +3148,7 @@ const st = StyleSheet.create({
   },
   sidebar: {
     width: 235,
-    backgroundColor: "#FCFCF8",
+    backgroundColor: C.paper,
     borderRightWidth: 1,
     borderRightColor: C.border,
     padding: 26,
@@ -3120,7 +3163,7 @@ const st = StyleSheet.create({
     alignItems: "center",
     gap: 13,
   },
-  navActive: { backgroundColor: "#E8EEE3" },
+  navActive: { backgroundColor: C.sage },
   count: {
     width: 20,
     height: 20,
@@ -3131,7 +3174,7 @@ const st = StyleSheet.create({
   },
   sidebarCare: {
     padding: 17,
-    backgroundColor: "#F2F1E8",
+    backgroundColor: C.sage,
     borderRadius: 17,
     gap: 10,
     marginBottom: 25,
@@ -3140,7 +3183,7 @@ const st = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: "#E6ECDC",
+    backgroundColor: C.sage,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3148,7 +3191,7 @@ const st = StyleSheet.create({
     height: 85,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
-    backgroundColor: "#FCFCF8",
+    backgroundColor: C.paper,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -3156,9 +3199,9 @@ const st = StyleSheet.create({
   },
   discoveryBar: {
     padding: 20,
-    backgroundColor: "#EFEEE6",
+    backgroundColor: C.sage,
     borderWidth: 1,
-    borderColor: "#E4E6DC",
+    borderColor: C.border,
     borderRadius: 16,
     marginBottom: 28,
     gap: 18,
@@ -3168,7 +3211,7 @@ const st = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     borderRadius: 19,
-    backgroundColor: "white",
+    backgroundColor: C.paper,
     overflow: "hidden",
   },
   cardBody: { padding: 20 },
@@ -3196,8 +3239,8 @@ const st = StyleSheet.create({
     padding: 20,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#DCE4D4",
-    backgroundColor: "#EEF1E7",
+    borderColor: C.border,
+    backgroundColor: C.sage,
     flexDirection: "row",
     gap: 16,
     alignItems: "center",
@@ -3219,7 +3262,7 @@ const st = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: C.border,
     paddingTop: 12,
-    backgroundColor: "#FCFCF8",
+    backgroundColor: C.paper,
   },
   bottomItem: {
     flex: 1,
@@ -3245,7 +3288,7 @@ const st = StyleSheet.create({
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
-    backgroundColor: "#FCFCF8",
+    backgroundColor: C.paper,
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 15,
@@ -3254,15 +3297,15 @@ const st = StyleSheet.create({
     width: 33,
     height: 33,
     borderRadius: 20,
-    backgroundColor: "#EAEFE5",
+    backgroundColor: C.sage,
     justifyContent: "center",
     alignItems: "center",
   },
   notice: {
     padding: 14,
-    backgroundColor: "#E7F0E2",
+    backgroundColor: C.sage,
     borderWidth: 1,
-    borderColor: "#CCDDC4",
+    borderColor: C.border,
     borderRadius: 12,
     flexDirection: "row",
     alignItems: "flex-start",
@@ -3272,7 +3315,7 @@ const st = StyleSheet.create({
   subtleBox: {
     padding: 16,
     borderRadius: 13,
-    backgroundColor: "#ECEFE5",
+    backgroundColor: C.sage,
     gap: 12,
     flexDirection: "row",
     alignItems: "flex-start",
@@ -3280,9 +3323,9 @@ const st = StyleSheet.create({
   healthBox: {
     padding: 20,
     borderRadius: 15,
-    backgroundColor: "#F1F0E6",
+    backgroundColor: C.sage,
     borderWidth: 1,
-    borderColor: "#E0E5D7",
+    borderColor: C.border,
   },
   divider: { height: 1, backgroundColor: C.border, marginVertical: 6 },
 });

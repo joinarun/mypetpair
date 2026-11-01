@@ -1,3 +1,5 @@
+> Current v2 cross-artifact review: [feature002 analysis](../specs/002-open-registration-chat/analysis.md). The review below records the historical invitation-gated v1 implementation.
+
 # MyPetPair specification review
 
 Spec Kit initialized from official github/spec-kit commit 7370e592f3cd9c06e5b698983957e227c75b30e2 with Codex integration. Constitution/spec templates resolved with bundled scripts, plan/tasks setup scripts ran, prerequisites passed. AI-authored artifacts follow the installed workflows; the CLI scaffolds workflows, it does not generate product content itself.

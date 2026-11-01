@@ -13,7 +13,7 @@ public class ApiFilter extends OncePerRequestFilter {
  final int authLimit,writeLimit;
  ApiFilter(PairService service,RateLimiter limiter,ObjectMapper json,@Value("${app.cors-allowed-origins}")String origins,@Value("${app.auth-rate-limit}")int authLimit,@Value("${app.write-rate-limit}")int writeLimit){this.service=service;this.limiter=limiter;this.json=json;this.origins=new HashSet<>(Arrays.asList(origins.split(",")));this.authLimit=authLimit;this.writeLimit=writeLimit;}
  @Override protected void doFilterInternal(HttpServletRequest req,HttpServletResponse res,FilterChain chain)throws ServletException,IOException{
-  res.setHeader("X-Content-Type-Options","nosniff");res.setHeader("X-Frame-Options","DENY");res.setHeader("Referrer-Policy","no-referrer");
+  res.setHeader("X-Content-Type-Options","nosniff");if(!req.getRequestURI().equals("/captcha"))res.setHeader("X-Frame-Options","DENY");res.setHeader("Referrer-Policy","no-referrer");
   String raw=req.getRequestURI().toLowerCase(Locale.ROOT);
   // Expo Router emits lazy chunks such as [screen]-hash.js; browsers encode their brackets.
   // Restrict safe filename escapes to static roots. API paths and encoded separators stay canonical.
@@ -27,7 +27,8 @@ public class ApiFilter extends OncePerRequestFilter {
   if(origin!=null&&origins.contains(origin)){res.setHeader("Access-Control-Allow-Origin",origin);res.setHeader("Vary","Origin");res.setHeader("Access-Control-Allow-Headers","Authorization,Content-Type");res.setHeader("Access-Control-Allow-Methods","GET,POST,PUT,PATCH,DELETE,OPTIONS");}
   if(req.getMethod().equals("OPTIONS")){res.setStatus(204);return;}
   try{
-   String path=requestPath;boolean open=Set.of("/api/health","/api/config","/api/auth/register","/api/auth/login").contains(path);
+   String path=requestPath;boolean open=Set.of("/api/health","/api/config","/api/auth/register","/api/auth/login","/api/captcha/challenge").contains(path);
+   if(path.equals("/api/captcha/challenge"))limiter.check("captcha:"+req.getRemoteAddr(),60,900000);
    if(path.startsWith("/api/auth/")&&!path.endsWith("logout"))limiter.check("auth:"+req.getRemoteAddr(),authLimit,900000);
    if(!open){String h=req.getHeader("Authorization");if(h==null||!h.startsWith("Bearer "))throw new ApiException(401,"Sign in to continue");String token=h.substring(7);Map<String,Object> owner=service.authenticate(token);req.setAttribute("owner",owner);req.setAttribute("token",token);if(!Set.of("GET","HEAD").contains(req.getMethod()))limiter.check("write:"+owner.get("id"),writeLimit,60000);}
    chain.doFilter(req,res);
