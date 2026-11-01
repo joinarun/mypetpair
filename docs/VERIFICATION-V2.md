@@ -12,7 +12,7 @@ Feature [002](../specs/002-open-registration-chat/) replaces the gated/approval-
 
 ## Deployment and Android
 
-Cloud Build succeeded and revision mypetpair-00003-79d serves the new image. All31 live PostgreSQL HTTP checks passed and13 synthetic accounts plus the operator session were cleaned up. Android1.1.0 release build617tasks, signature/alignment/non-debuggable/API/ABI checks, update installation and cold launch passed on Android16 ARM64; startup logs had no app errors. Live signup iframe render and keyboard focus passed in fresh Chrome tabs without console errors. An initial blank frame during rollout was resolved by a clean page reload; no code change needed. GitHub release publication is the final remaining action at this documentation commit. See release record for exact hashes and artifact links. Older1.0.0 APK lacks required CAPTCHA controls and must be upgraded for new logins.
+Cloud Build succeeded and revision mypetpair-00003-79d serves the new image. All31 live PostgreSQL HTTP checks passed and13 synthetic accounts plus the operator session were cleaned up. Android1.1.0 release build617tasks, signature/alignment/non-debuggable/API/ABI checks, update installation and cold launch passed on Android16 ARM64; startup logs had no app errors. Live signup iframe render and keyboard focus passed in fresh Chrome tabs without console errors. An initial blank frame during rollout was resolved by a clean page reload; no code change needed. GitHub pre-release v1.1.0-test.1 is published with APK/checksum and the remote APK digest matches the local artifact. See release record for exact hashes and artifact links. Older1.0.0 APK lacks required CAPTCHA controls and must be upgraded for new logins.
 
 ## Limitations
 
