@@ -30,8 +30,8 @@
 ## Integration and release
 - [x] T018 Update operations/privacy/API/database/architecture and release instructions in docs/ and README.md; configure Secret Manager CAPTCHA and deployment in scripts/deploy-gcp.py.
 - [x] T019 Run cross-artifact review and resolve findings in specs/002-open-registration-chat/analysis.md.
-- [ ] T020 Run backend checks, client lint/types/exports, localHTTP/browser/theme checks and isolated PostgreSQL smoke; record docs/VERIFICATION-V2.md.
-- [ ] T021 Publish secret-scanned source and deploy additive migration/web/API to GCP mypetpair; verify deployed changes and cleanup synthetic data in scripts/smoke-v2.py.
+- [x] T020 Run backend checks, client lint/types/exports, localHTTP/browser/theme checks and isolated PostgreSQL smoke; record docs/VERIFICATION-V2.md.
+- [x] T021 Publish secret-scanned source and deploy additive migration/web/API to GCP mypetpair; verify deployed changes and cleanup synthetic data in scripts/smoke-v2.py.
 - [ ] T022 Build updated signed Android test APK, verify signature/hash/API; upload GitHub pre-release with notes and report iOS signing/device limits in docs/MOBILE_TESTING.md and docs/RELEASE.md.
 
 Dependencies: T001–003 before stories; auth T004–007 before end-to-end checks. US2/US3 share domain service: coordinate edits in one owner. US4 is independent palette work after client integration. CAPTCHA can progress independently of domain service; schema versions separated. Root owns specs/operations/release; server agent owns domain+tests; CAPTCHA agent owns dedicated authproof files; client agent owns shared UI. Integration/release require all stories verified. All features ship together under this explicit owner request, no partially disabled production CAPTCHA.
