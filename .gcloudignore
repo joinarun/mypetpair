@@ -3,6 +3,9 @@
 .gitignore
 **/node_modules
 **/target
+frontend/android
+frontend/ios
+backend/backend
 **/.expo
 **/dist
 .env

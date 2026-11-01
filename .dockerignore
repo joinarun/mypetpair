@@ -4,6 +4,9 @@ node_modules
 **/.expo
 **/dist
 **/target
+frontend/android
+frontend/ios
+backend/backend
 **/*.log
 .env*
 **/.env*
