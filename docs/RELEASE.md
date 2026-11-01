@@ -1,5 +1,7 @@
 # MyPetPair deployed pilot release
 
+Android test APK distribution was added on 1 November 2026: [download release](https://github.com/joinarun/mypetpair/releases/tag/v1.0.0-test.1) and [mobile verification/install instructions](MOBILE_TESTING.md). iOS testing is deferred at the product owner's request. The web/backend deployment below is unchanged.
+
 Released 1 November 2026 as an invitation-only pilot. Open registration and app-store publication are separate milestones.
 
 ## Application and source

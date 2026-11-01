@@ -53,6 +53,8 @@ Use the male owner to discover a female dog and send interest, then switch to th
 
 ## Web and native clients
 
+For Android APK downloads, installation and local rebuilds, see [mobile testing](docs/MOBILE_TESTING.md). iOS test distribution is deferred for this release at the product owner's request.
+
 In a second terminal, install the locked client dependencies and start web development:
 
 ```sh
@@ -74,7 +76,7 @@ npm run export:all
 
 The all-platform export creates web assets plus Android/iOS JavaScript bundles. Use `npm run export:web` for the Spring-served web artifact. The deployment build includes that artifact with the backend; see the root Dockerfile and [operations](docs/OPERATIONS.md).
 
-Native signing and cloud builds use the profiles in `frontend/eas.json`. Configure a user-owned Expo/EAS project, application identifiers and Apple/Google credentials before producing signed installable builds. Do not commit signing material. No store release is implied by a successful JavaScript export.
+Production signing and cloud builds use the profiles in `frontend/eas.json`. Configure a user-owned Expo/EAS project and publisher credentials for store distribution. Internal Android test APKs can also be built locally using [the mobile build script](scripts/build-mobile-tests.sh). Do not commit signing material. No store release is implied by a successful JavaScript export or test APK build.
 
 ## Environment configuration
 
