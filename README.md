@@ -2,7 +2,11 @@
 
 Nearby dog discovery, female-owner-controlled connections and private in-app chat, built with Java Spring Boot and one Expo React Native/Web client for web, Android and iOS. Free service; no payments.
 
+**Hosted app resumed on 23 November 2026.** The database uses private networking. [Cloud status and pause/resume procedure](docs/PAUSE_RESUME.md).
+
 [Live app](https://mypetpair-248924650823.us-central1.run.app) · [PRD](docs/PRD.md) · [Current specs/API](specs/002-open-registration-chat/) · [Operations](docs/OPERATIONS.md) · [Mobile testing](docs/MOBILE_TESTING.md)
+
+Use `python3 scripts/power-gcp.py status`, `down`, or `up` to check, stop, or start the hosted app. [Setup and recovery commands](docs/PAUSE_RESUME.md#run-the-start-and-stop-script).
 
 ## Current scope
 
